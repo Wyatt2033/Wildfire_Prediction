@@ -3,3 +3,5 @@ streamlit~=1.32.2
 scikit-learn~=1.4.1.post1
 openmeteo_requests~=1.2.0
 geopy~=2.4.1
+requests_cache
+retry_requests
