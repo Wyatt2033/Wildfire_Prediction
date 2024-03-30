@@ -1,13 +1,11 @@
-
-import streamlit as st
-import pandas as pd
-
-from sklearn.metrics import accuracy_score
-
 import data
 import geocoding
 import randomForest
 import weather
+import streamlit as st
+import pandas as pd
+from sklearn.metrics import accuracy_score
+
 
 st.write("""
 
