@@ -4,6 +4,7 @@ import randomForest
 import weather
 import streamlit as st
 import pandas as pd
+import geopandas as gpd
 from sklearn.metrics import accuracy_score
 
 
@@ -22,6 +23,9 @@ st.write("""
 This is a web app to predict the risk of wildfires in the United States.
 
     """)
+
+gdf = gpd.read_file('map_data/cb_2018_us_county_5m.shp')
+print(gdf.columns)
 
 
 
@@ -60,6 +64,7 @@ def train_model(x_train, y_train, x_test, y_test):
     return model
 
 # Calls main() from main.py
+
 def main():
     merge_data = pd.read_csv('datasets/merged_data.csv')
 
@@ -68,20 +73,8 @@ def main():
     if state:
         state = geocoding.state_get_abrev(state)
         counties = data.get_counties_for_state(state)
-        for county in counties:
-            lat, long = geocoding.get_lat_long(county, state)
-            with open("output.txt", "a") as f:
-                f.write(f'{county}, {state}: {lat}, {long}\n')
-            weather_data = weather.get_weather_data(lat, long)
-            weather_data_averages = pd.DataFrame(weather_data.mean()).transpose()
-            pd.set_option('display.max_columns', 7)
-            # print(weather_data_averages)
-            with open("output.txt", "a") as f:
-                f.write(f'{weather_data}\n')
-            wildfire_risk = randomForest.predict_wildfire_risk(weather_data_averages)
-            risk = "High" if wildfire_risk[0] else "Low"
-            st.write(f"{county}, {state}: {risk} risk of wildfire")
-            print(f"{county}, {state}: {risk} risk of wildfire; Probability: {wildfire_risk[1]}")
+        geocoding.plot_fire_map(state, counties)
+
 
 
 

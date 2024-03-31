@@ -1,6 +1,59 @@
-
-
+import io
+import streamlit as st
+import  pandas as pd
+import geopandas as gpd
+import matplotlib.pyplot as plt
 from geopy.geocoders import GoogleV3
+from matplotlib.colors import ListedColormap
+
+import randomForest
+import weather
+
+
+def plot_fire_map(state, counties):
+
+    state_fips = {
+        "AL": "01", "AK": "02", "AZ": "04", "AR": "05", "CA": "06", "CO": "08", "CT": "09", "DE": "10", "FL": "12",
+        "GA": "13", "HI": "15", "ID": "16", "IL": "17", "IN": "18", "IA": "19", "KS": "20", "KY": "21", "LA": "22",
+        "ME": "23", "MD": "24", "MA": "25", "MI": "26", "MN": "27", "MS": "28", "MO": "29", "MT": "30", "NE": "31",
+        "NV": "32", "NH": "33", "NJ": "34", "NM": "35", "NY": "36", "NC": "37", "ND": "38", "OH": "39", "OK": "40",
+        "OR": "41", "PA": "42", "RI": "44", "SC": "45", "SD": "46", "TN": "47", "TX": "48", "UT": "49", "VT": "50",
+        "VA": "51", "WA": "53", "WV": "54", "WI": "55", "WY": "56"
+    }
+
+    gdf = gpd.read_file('map_data/cb_2018_us_county_5m.shp')
+    gdf_state = gdf[gdf['STATEFP'] == state_fips[state]]
+
+    gdf_state['risk_color'] = 'white'
+
+    for county in counties:
+        lat,long = get_lat_long(county, state)
+        print(f"County: {county}, State: {state}, Lat: {lat}, Long: {long}")
+        weather_data = weather.get_weather_data(lat, long)
+        weather_data_averages = pd.DataFrame(weather_data.mean()).transpose()
+        wildfire_risk = randomForest.predict_wildfire_risk(weather_data_averages)
+        risk = "High" if wildfire_risk else "Low"
+
+        risk_color = 'red' if wildfire_risk else 'green'
+        gdf_state.loc[gdf_state['NAME'] == county, 'risk_color'] = risk_color
+        print(gdf_state)
+
+
+        fig, ax = plt.subplots()
+        try:
+            cmap = ListedColormap(['white', 'red', 'green'])
+            gdf_state.plot(ax=ax, color='green')
+
+        except ValueError:
+            ax.set_aspect('auto')
+        st.pyplot(fig)
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    st.image(buf, caption='Wildfire Risk Map', use_column_width=True)
+
+
 
 def get_lat_long(county_name, state_name):
     geolocator = GoogleV3(api_key='AIzaSyBxIbGubpa41aTqVXdpFSzHfzaYibiXe6M')
@@ -63,3 +116,4 @@ def state_get_abrev(state):
         "Wyoming": "WY"
     }
     return state_abrev[state]
+
