@@ -23,26 +23,27 @@ def plot_fire_map(state, counties):
 
     gdf = gpd.read_file('map_data/cb_2018_us_county_5m.shp')
     gdf_state = gdf[gdf['STATEFP'] == state_fips[state]]
-
+    gdf_state['NAME'] = gdf_state['NAME'].apply(standardize_county_name)
     gdf_state['risk_color'] = 'white'
-
+    print("Unique county names in GeoDataFrame:", gdf_state['NAME'].unique())
+    print("Counties list:", counties)
     for county in counties:
         lat,long = get_lat_long(county, state)
-        print(f"County: {county}, State: {state}, Lat: {lat}, Long: {long}")
         weather_data = weather.get_weather_data(lat, long)
         weather_data_averages = pd.DataFrame(weather_data.mean()).transpose()
         wildfire_risk = randomForest.predict_wildfire_risk(weather_data_averages)
         risk = "High" if wildfire_risk else "Low"
 
         risk_color = 'red' if wildfire_risk else 'green'
-        gdf_state.loc[gdf_state['NAME'] == county, 'risk_color'] = risk_color
-        print(gdf_state)
+        gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = risk_color
+
 
 
         fig, ax = plt.subplots()
         try:
-            cmap = ListedColormap(['white', 'red', 'green'])
-            gdf_state.plot(ax=ax, color='green')
+            cmap = ListedColormap(['yellow', 'red', 'green'])
+            gdf_state.plot(ax=ax, color='yellow')
+            ax.set_aspect('equal')
 
         except ValueError:
             ax.set_aspect('auto')
@@ -61,6 +62,16 @@ def get_lat_long(county_name, state_name):
 
     return (location.latitude, location.longitude)
 
+def standardize_county_name(county_name):
+    suffixes = [" County", " Parish", " Borough", " City", " Municipality", " Census Area", " Area", " and"]
+    for suffix in suffixes:
+        if suffix in county_name:
+            county_name = county_name.replace(suffix, "")
+            county_name = county_name.strip()
+            county_name = county_name.replace('county', '')
+
+
+    return county_name
 
 def state_get_abrev(state):
     state_abrev = {

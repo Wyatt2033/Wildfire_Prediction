@@ -73,6 +73,7 @@ def main():
     if state:
         state = geocoding.state_get_abrev(state)
         counties = data.get_counties_for_state(state)
+        counties = [geocoding.standardize_county_name(county) for county in counties]
         geocoding.plot_fire_map(state, counties)
 
 
