@@ -7,12 +7,23 @@ import matplotlib.patches as mpatches
 from geopy.geocoders import GoogleV3
 from matplotlib.colors import ListedColormap
 
-
 import randomForest
 import weather
 
 
+
+def create_legend():
+    fig, ax = plt.subplots(figsize=(6, 6))
+    red_patch = mpatches.Patch(color='red', label='High risk')
+    green_patch = mpatches.Patch(color='green', label='Low risk')
+    yellow_patch = mpatches.Patch(color='white', label='Not assessed')
+
+    fig, ax = plt.subplots()
+    legend = plt.legend(handles=[red_patch, green_patch, yellow_patch], loc='upper center', bbox_to_anchor=(0.5, 1.05))
+    ax.axis('off')
+    st.pyplot(fig)
 def plot_fire_map(state, counties):
+    create_legend()
     state_fips = {
         "AL": "01", "AK": "02", "AZ": "04", "AR": "05", "CA": "06", "CO": "08", "CT": "09", "DE": "10", "FL": "12",
         "GA": "13", "HI": "15", "ID": "16", "IL": "17", "IN": "18", "IA": "19", "KS": "20", "KY": "21", "LA": "22",
@@ -21,6 +32,9 @@ def plot_fire_map(state, counties):
         "OR": "41", "PA": "42", "RI": "44", "SC": "45", "SD": "46", "TN": "47", "TX": "48", "UT": "49", "VT": "50",
         "VA": "51", "WA": "53", "WV": "54", "WI": "55", "WY": "56"
     }
+
+
+
     plot_placeholder = st.empty()
     gdf = gpd.read_file('map_data/cb_2018_us_county_5m.shp')
     gdf_state = gdf[gdf['STATEFP'] == state_fips[state]]
@@ -46,11 +60,9 @@ def plot_fire_map(state, counties):
         gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = risk_color
         centroid = gdf_state.loc[gdf_state['NAME'].str.contains(county), 'geometry'].centroid
 
-
         gdf_state.plot(ax=ax, color='yellow', edgecolor='black')  # Add edgecolor parameter here
         gdf_state.plot(ax=ax, color=gdf_state['risk_color'], edgecolor='black')  # Add edgecolor parameter here
         if i % 3 == 0:
-
             plot_placeholder.pyplot(fig)
 
         try:
@@ -62,15 +74,10 @@ def plot_fire_map(state, counties):
 
             gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = risk_color
 
-            red_patch = mpatches.Patch(color='red', label='High risk')
-            green_patch = mpatches.Patch(color='green', label='Low risk')
-            yellow_patch = mpatches.Patch(color='yellow', label='Not processed')
-            plt.legend(handles=[red_patch, green_patch, yellow_patch])
             ax.set_aspect('equal')
 
         except ValueError:
             ax.set_aspect('auto')
-
 
     buf = io.BytesIO()
     plt.savefig(buf, format='png')
