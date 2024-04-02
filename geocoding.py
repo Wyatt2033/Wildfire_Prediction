@@ -1,17 +1,18 @@
 import io
 import streamlit as st
-import  pandas as pd
+import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from geopy.geocoders import GoogleV3
 from matplotlib.colors import ListedColormap
+
 
 import randomForest
 import weather
 
 
 def plot_fire_map(state, counties):
-
     state_fips = {
         "AL": "01", "AK": "02", "AZ": "04", "AR": "05", "CA": "06", "CO": "08", "CT": "09", "DE": "10", "FL": "12",
         "GA": "13", "HI": "15", "ID": "16", "IL": "17", "IN": "18", "IA": "19", "KS": "20", "KY": "21", "LA": "22",
@@ -20,16 +21,20 @@ def plot_fire_map(state, counties):
         "OR": "41", "PA": "42", "RI": "44", "SC": "45", "SD": "46", "TN": "47", "TX": "48", "UT": "49", "VT": "50",
         "VA": "51", "WA": "53", "WV": "54", "WI": "55", "WY": "56"
     }
-
+    plot_placeholder = st.empty()
     gdf = gpd.read_file('map_data/cb_2018_us_county_5m.shp')
     gdf_state = gdf[gdf['STATEFP'] == state_fips[state]]
-    print(gdf_state)
     gdf_state['NAME'] = gdf_state['NAME'].apply(standardize_county_name)
     gdf_state['risk_color'] = 'white'
-    print("Unique county names in GeoDataFrame:", gdf_state['NAME'].unique())
-    print("Counties list:", counties)
+    fig, ax = plt.subplots()
+    ax.axis('off')
+    ax.set_facecolor('#0b0e12')
+    fig.patch.set_facecolor('#0b0e12')
     for county in counties:
-        lat,long = get_lat_long(county, state)
+        centroid = gdf_state.loc[gdf_state['NAME'].str.contains(county), 'geometry'].centroid
+        ax.annotate(county, (centroid.x, centroid.y), color='black', fontsize=4, ha='center')
+    for i, county in enumerate(counties):
+        lat, long = get_lat_long(county, state)
         weather_data = weather.get_weather_data(lat, long)
         weather_data_averages = pd.DataFrame(weather_data.mean()).transpose()
         wildfire_risk = randomForest.predict_wildfire_risk(weather_data_averages)
@@ -38,27 +43,34 @@ def plot_fire_map(state, counties):
 
         risk_color = 'red' if wildfire_risk[0] else 'green'
 
-
         gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = risk_color
-        gdf_state.loc[gdf_state['NAME'].str.contains('HIGHLAND'), 'risk_color'] = 'blue'
+        centroid = gdf_state.loc[gdf_state['NAME'].str.contains(county), 'geometry'].centroid
 
 
+        gdf_state.plot(ax=ax, color='yellow', edgecolor='black')  # Add edgecolor parameter here
+        gdf_state.plot(ax=ax, color=gdf_state['risk_color'], edgecolor='black')  # Add edgecolor parameter here
+        if i % 3 == 0:
 
-        fig, ax = plt.subplots()
+            plot_placeholder.pyplot(fig)
+
         try:
             cmap = ListedColormap(['yellow', 'red', 'green'])
             gdf_state.plot(ax=ax, color='yellow')
             gdf_state.plot(ax=ax, color=gdf_state['risk_color'])
+            gdf_state.plot(ax=ax, color='yellow', edgecolor='black')  # Add edgecolor parameter here
+            gdf_state.plot(ax=ax, color=gdf_state['risk_color'], edgecolor='black')  # Add edgecolor parameter here
 
             gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = risk_color
-            gdf_state.loc[gdf_state['NAME'].str.contains('HIGHLAND'), 'risk_color'] = 'blue'
 
-
+            red_patch = mpatches.Patch(color='red', label='High risk')
+            green_patch = mpatches.Patch(color='green', label='Low risk')
+            yellow_patch = mpatches.Patch(color='yellow', label='Not processed')
+            plt.legend(handles=[red_patch, green_patch, yellow_patch])
             ax.set_aspect('equal')
 
         except ValueError:
             ax.set_aspect('auto')
-        st.pyplot(fig)
+
 
     buf = io.BytesIO()
     plt.savefig(buf, format='png')
@@ -66,12 +78,12 @@ def plot_fire_map(state, counties):
     st.image(buf, caption='Wildfire Risk Map', use_column_width=True)
 
 
-
 def get_lat_long(county_name, state_name):
     geolocator = GoogleV3(api_key='AIzaSyBxIbGubpa41aTqVXdpFSzHfzaYibiXe6M')
     location = geolocator.geocode(f"{county_name}, {state_name}")
 
     return (location.latitude, location.longitude)
+
 
 def standardize_county_name(county_name):
     suffixes = [" County", " Parish", " Borough", " City", " Municipality", " Census Area", " Area", " and"]
@@ -81,8 +93,8 @@ def standardize_county_name(county_name):
             county_name = county_name.strip()
             county_name = county_name.replace('county', '')
 
-
     return county_name
+
 
 def state_get_abrev(state):
     state_abrev = {
@@ -138,4 +150,3 @@ def state_get_abrev(state):
         "Wyoming": "WY"
     }
     return state_abrev[state]
-
