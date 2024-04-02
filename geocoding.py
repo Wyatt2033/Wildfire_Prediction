@@ -23,6 +23,7 @@ def plot_fire_map(state, counties):
 
     gdf = gpd.read_file('map_data/cb_2018_us_county_5m.shp')
     gdf_state = gdf[gdf['STATEFP'] == state_fips[state]]
+    print(gdf_state)
     gdf_state['NAME'] = gdf_state['NAME'].apply(standardize_county_name)
     gdf_state['risk_color'] = 'white'
     print("Unique county names in GeoDataFrame:", gdf_state['NAME'].unique())
@@ -32,10 +33,14 @@ def plot_fire_map(state, counties):
         weather_data = weather.get_weather_data(lat, long)
         weather_data_averages = pd.DataFrame(weather_data.mean()).transpose()
         wildfire_risk = randomForest.predict_wildfire_risk(weather_data_averages)
+        st.write(f"{county}, {state}: {wildfire_risk} risk of wildfire")
         risk = "High" if wildfire_risk else "Low"
 
-        risk_color = 'red' if wildfire_risk else 'green'
+        risk_color = 'red' if wildfire_risk[0] else 'green'
+
+
         gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = risk_color
+        gdf_state.loc[gdf_state['NAME'].str.contains('HIGHLAND'), 'risk_color'] = 'blue'
 
 
 
@@ -43,6 +48,12 @@ def plot_fire_map(state, counties):
         try:
             cmap = ListedColormap(['yellow', 'red', 'green'])
             gdf_state.plot(ax=ax, color='yellow')
+            gdf_state.plot(ax=ax, color=gdf_state['risk_color'])
+
+            gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = risk_color
+            gdf_state.loc[gdf_state['NAME'].str.contains('HIGHLAND'), 'risk_color'] = 'blue'
+
+
             ax.set_aspect('equal')
 
         except ValueError:
