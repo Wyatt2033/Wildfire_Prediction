@@ -6,24 +6,34 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from geopy.geocoders import GoogleV3
 from matplotlib.colors import ListedColormap
+from matplotlib.legend import Legend
+from matplotlib.lines import Line2D
 
 import randomForest
 import weather
 
-
+class SizedLegend(Legend):
+    def __init__(self, parent, handles, labels, *args, **kwargs):
+        super().__init__(parent, handles, labels, *args, **kwargs)
+        self.legendPatch.set_boxstyle("round,pad=0.02")
 
 def create_legend():
-    fig, ax = plt.subplots(figsize=(6, 6))
-    red_patch = mpatches.Patch(color='red', label='High risk')
-    green_patch = mpatches.Patch(color='green', label='Low risk')
-    yellow_patch = mpatches.Patch(color='white', label='Not assessed')
-
     fig, ax = plt.subplots()
-    legend = plt.legend(handles=[red_patch, green_patch, yellow_patch], loc='upper center', bbox_to_anchor=(0.5, 1.05))
+    ax.set_aspect(0.1)
     ax.axis('off')
-    st.pyplot(fig)
+    fig.patch.set_facecolor('#0b0e12')
+    ax.set_facecolor('#0b0e12')
+    red_patch = mpatches.Patch(color='red', label='High Risk')
+    green_patch = mpatches.Patch(color='green', label='Low Risk')
+    ax.legend(handles=[red_patch, green_patch], loc='upper right')
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    st.image(buf, caption='Legend', use_column_width=True)
+
+
 def plot_fire_map(state, counties):
-    create_legend()
+    #create_legend()
     state_fips = {
         "AL": "01", "AK": "02", "AZ": "04", "AR": "05", "CA": "06", "CO": "08", "CT": "09", "DE": "10", "FL": "12",
         "GA": "13", "HI": "15", "ID": "16", "IL": "17", "IN": "18", "IA": "19", "KS": "20", "KY": "21", "LA": "22",
@@ -41,9 +51,14 @@ def plot_fire_map(state, counties):
     gdf_state['NAME'] = gdf_state['NAME'].apply(standardize_county_name)
     gdf_state['risk_color'] = 'white'
     fig, ax = plt.subplots()
+    plt.subplots_adjust(bottom=0.2)
     ax.axis('off')
     ax.set_facecolor('#0b0e12')
     fig.patch.set_facecolor('#0b0e12')
+    red_patch = Line2D([0], [0], color='red', linewidth=5, label='High Risk')
+    green_patch = Line2D([0], [0], color='green', linewidth=5, label='Low Risk')
+    legend = SizedLegend(ax, [red_patch, green_patch], ['High Risk', 'Low Risk'], loc='upper right', frameon=True, handlelength=0.5, prop={'size':4})
+    ax.add_artist(legend)
     for county in counties:
         centroid = gdf_state.loc[gdf_state['NAME'].str.contains(county), 'geometry'].centroid
         ax.annotate(county, (centroid.x, centroid.y), color='black', fontsize=4, ha='center')
