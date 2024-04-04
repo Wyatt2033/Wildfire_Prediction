@@ -43,8 +43,7 @@ def plot_fire_map(state, counties):
         "VA": "51", "WA": "53", "WV": "54", "WI": "55", "WY": "56"
     }
 
-
-
+    list_placeholder = st.empty()
     plot_placeholder = st.empty()
     gdf = gpd.read_file('map_data/cb_2018_us_county_5m.shp')
     gdf_state = gdf[gdf['STATEFP'] == state_fips[state]]
@@ -59,9 +58,20 @@ def plot_fire_map(state, counties):
     green_patch = Line2D([0], [0], color='green', linewidth=5, label='Low Risk')
     legend = SizedLegend(ax, [red_patch, green_patch], ['High Risk', 'Low Risk'], loc='upper right', frameon=True, handlelength=0.5, prop={'size':4})
     ax.add_artist(legend)
+    county_numbers = {county: i for i, county in enumerate(counties)}
     for county in counties:
-        centroid = gdf_state.loc[gdf_state['NAME'].str.contains(county), 'geometry'].centroid
-        ax.annotate(county, (centroid.x, centroid.y), color='black', fontsize=4, ha='center')
+        matching_geometries = gdf_state.loc[gdf_state['NAME'].str.contains(county), 'geometry']
+        representative_point = matching_geometries.unary_union.representative_point()
+        offset = 0
+        ax.annotate(county_numbers[county], (representative_point.x + offset, representative_point.y), color='blue', fontsize=4, ha='left', va='center')
+    grid_layout = ""
+    for county, number in county_numbers.items():
+
+        grid_layout += f"| {county:<20}: {number:<5} "
+        if (number+1) % 6 == 0:
+            grid_layout += "\n"
+    list_placeholder.markdown(grid_layout)
+
     for i, county in enumerate(counties):
         lat, long = get_lat_long(county, state)
         weather_data = weather.get_weather_data(lat, long)

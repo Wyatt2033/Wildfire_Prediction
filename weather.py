@@ -1,7 +1,21 @@
+import os
+
 import openmeteo_requests
 import requests_cache
 import pandas as pd
+import json
 from retry_requests import retry
+
+def get_cached_weather_data(lat, long):
+
+    cache_file_path = 'weather_cache.json'
+    cahce_key = f'{lat}_{long}'
+    if os.path.exists(cache_file_path):
+        with open(cache_file_path, 'r') as f:
+            cache = json.load(f)
+    else:
+        cache = {}
+
 
 
 def get_weather_data(lat, long):
