@@ -74,7 +74,7 @@ def plot_fire_map(state, counties):
 
     for i, county in enumerate(counties):
         lat, long = get_lat_long(county, state)
-        weather_data = weather.get_weather_data(lat, long)
+        weather_data = weather.get_cached_weather_data(lat, long)
         weather_data_averages = pd.DataFrame(weather_data.mean()).transpose()
         wildfire_risk = randomForest.predict_wildfire_risk(weather_data_averages)
         st.write(f"{county}, {state}: {wildfire_risk} risk of wildfire")

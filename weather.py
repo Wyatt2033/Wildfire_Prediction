@@ -6,16 +6,31 @@ import pandas as pd
 import json
 from retry_requests import retry
 
-def get_cached_weather_data(lat, long):
 
+def get_cached_weather_data(lat, long):
     cache_file_path = 'weather_cache.json'
-    cahce_key = f'{lat}_{long}'
+    cache_key = f'{lat}_{long}'
+    cache = {}
+
     if os.path.exists(cache_file_path):
         with open(cache_file_path, 'r') as f:
-            cache = json.load(f)
-    else:
-        cache = {}
+            file_content = f.read().strip()
+            if file_content:  # Check if file is not empty
+                f.seek(0)  # Reset file pointer to beginning
+                try:
+                    cache = json.load(f)
+                except json.JSONDecodeError:
+                    print(f"Error decoding JSON from file. File content: {file_content}")
+                    raise
 
+    if cache_key in cache:
+        weather_data = pd.DataFrame(cache[cache_key])
+    else:
+        weather_data = get_weather_data(lat, long)
+        cache[cache_key] = weather_data.to_dict(orient='records')
+        with open(cache_file_path, 'w') as f:
+            json.dump(cache, f)
+    return weather_data
 
 
 def get_weather_data(lat, long):
@@ -50,7 +65,6 @@ def get_weather_data(lat, long):
     # Process hourly data. The order of variables needs to be the same as requested.
     hourly = response.Hourly()
     hourly_dew_point_2m = hourly.Variables(0).ValuesAsNumpy()[:14]
-
 
     # Process daily data. The order of variables needs to be the same as requested.
     daily = response.Daily()

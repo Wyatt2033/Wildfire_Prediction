@@ -1,3 +1,8 @@
+
+import time
+
+import schedule
+
 import data
 import geocoding
 import randomForest
@@ -6,15 +11,16 @@ import streamlit as st
 import pandas as pd
 import geopandas as gpd
 from sklearn.metrics import accuracy_score
+from datetime import datetime, timedelta
 
 
-state_names = ["Alaska", "Alabama", "Arkansas", "American Samoa", "Arizona", "California", "Colorado",
-               "Connecticut", "District ", "of Columbia", "Delaware", "Florida", "Georgia", "Guam", "Hawaii",
+state_names = ["Alaska", "Alabama", "Arkansas", "Arizona", "California", "Colorado",
+               "Connecticut",  "Delaware", "Florida", "Georgia", "Hawaii",
                "Iowa", "Idaho", "Illinois", "Indiana", "Kansas", "Kentucky", "Louisiana", "Massachusetts", "Maryland",
                "Maine", "Michigan", "Minnesota", "Missouri", "Mississippi", "Montana", "North Carolina", "North Dakota",
                "Nebraska", "New Hampshire", "New Jersey", "New Mexico", "Nevada", "New York", "Ohio", "Oklahoma",
-               "Oregon", "Pennsylvania", "Puerto Rico", "Rhode Island", "South Carolina", "South Dakota", "Tennessee",
-               "Texas", "Utah", "Virginia", "Virgin Islands", "Vermont", "Washington", "Wisconsin", "West Virginia", "Wyoming"]
+               "Oregon", "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota", "Tennessee",
+               "Texas", "Utah", "Virginia", "Vermont", "Washington", "Wisconsin", "West Virginia", "Wyoming"]
 
 st.write("""
 
@@ -63,6 +69,34 @@ def train_model(x_train, y_train, x_test, y_test):
 
     return model
 
+
+last_update_dates = {}
+def update_weather_data():
+    start_index = state_names.index("Texas")
+    for state in state_names[start_index:]:
+        state_abrev = geocoding.state_get_abrev(state)
+        counties = data.get_counties_for_state(state_abrev)
+        print("Getting weather data for", state_abrev)
+        for county in counties:
+            try:
+                county = geocoding.standardize_county_name(county)
+                lat_long = geocoding.get_lat_long(county, state)
+                if lat_long is None:
+                    print(f"Could not find latitude and longitude for {county}, {state}")
+                    continue
+                lat, long = lat_long
+                last_update_date = last_update_dates.get(county)
+
+                if last_update_date is not None and datetime.now() - last_update_date < timedelta(weeks=1):
+                    print(f"Skipping update for {county}, {state} as the data is newer than a week")
+                    continue
+
+                weather_data = weather.get_cached_weather_data(lat, long)
+                last_update_dates[county] = datetime.now()
+            except Exception as e:
+                print(f"An error occurred while updating weather data for {county}, {state}: {e}")
+
+
 # Calls main() from main.py
 
 def main():
@@ -75,6 +109,12 @@ def main():
         counties = data.get_counties_for_state(state)
         counties = [geocoding.standardize_county_name(county) for county in counties]
         geocoding.plot_fire_map(state, counties)
+
+    schedule.every().monday. do(update_weather_data)
+    update_weather_data()
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
 
 
