@@ -39,7 +39,7 @@ def create_legend():
 
 
 def predict_and_plot(args):
-    county ,state, gdf_state = args
+    county, state, gdf_state = args
     try:
         lat, long = get_lat_long(county, state)
         with open(os.devnull, 'w') as f, contextlib.redirect_stdout(f):
@@ -53,6 +53,7 @@ def predict_and_plot(args):
         print(f"An error occurred while processing {county}, {state}: {e}")
         gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = 'white'
     return gdf_state.loc[gdf_state['NAME'].str.contains(county)]
+
 
 def plot_fire_map(state, counties):
     # create_legend()
@@ -79,24 +80,45 @@ def plot_fire_map(state, counties):
     gdf_state = pd.concat([gdf_state] + gdf_states)
     print("Finished processing all counties")
 
+
+
     # Plot map
     fig, ax = plt.subplots()
     plt.subplots_adjust(bottom=0.2)
+    fig, ax = plt.subplots(figsize=(10, 10))
     ax.axis('off')
     ax.set_facecolor('#0b0e12')
     fig.patch.set_facecolor('#0b0e12')
+
     red_patch = Line2D([0], [0], color='red', linewidth=5, label='High Risk')
     green_patch = Line2D([0], [0], color='green', linewidth=5, label='Low Risk')
     legend = SizedLegend(ax, [red_patch, green_patch], ['High Risk', 'Low Risk'], loc='upper right', frameon=True,
-                         handlelength=0.5, prop={'size': 4})
+                         handlelength=0.5, prop={'size': 8})
     ax.add_artist(legend)
 
     gdf_state.plot(ax=ax, color='yellow', edgecolor='black')  # Add edgecolor parameter here
     gdf_state.plot(ax=ax, color=gdf_state['risk_color'], edgecolor='black')  # Add edgecolor parameter here
+    county_numbers = {county: i for i, county in enumerate(counties)}
+    for county in counties:
+        centroid = gdf_state.loc[gdf_state['NAME'].str.contains(county), 'geometry'].centroid
+       # ax.annotate(county, (centroid.x.iloc[0], centroid.y.iloc[0]), color='black', fontsize=4, ha='center')
+        matching_geometries = gdf_state.loc[gdf_state['NAME'].str.contains(county), 'geometry']
+        representative_point = matching_geometries.unary_union.representative_point()
+        offset = 0
+        ax.annotate(county_numbers[county], (representative_point.x + offset, representative_point.y), color='blue',
+                    fontsize=8, ha='left', va='center')
+    grid_layout = ""
+    for county, number in county_numbers.items():
+
+        grid_layout += f"| {county:<20}: {number:<5} "
+        if (number + 1) % 6 == 0:
+            grid_layout += "\n"
+    list_placeholder.markdown(grid_layout)
 
     buf = io.BytesIO()
     plt.savefig(buf, format='png')
     buf.seek(0)
+
     st.image(buf, caption='Wildfire Risk Map', use_column_width=True)
 
 
