@@ -46,14 +46,14 @@ def train_model(x_train, y_train):
 
 def save_model(model):
     pickle.dumps(model)
-    with open('models/trained_model.pkl', 'wb') as f:
+    with open('./models/trained_model.pkl', 'wb') as f:
         pickle.dump(model, f)
 
     return model
 
 
 def predict_wildfire_risk(weather_data_averages):
-    with open('models/trained_model.pkl', 'rb') as f:
+    with open('./models/trained_model.pkl', 'rb') as f:
         model = pickle.load(f)
     now = datetime.datetime.now()
     month = now.month
