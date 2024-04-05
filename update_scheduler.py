@@ -1,6 +1,6 @@
 import gdown
 file_id = "1OuWtu2ojLQLdxnzMKm452rfaVH3crEWA"
-destination = "/models"
+destination = "./models"
 
 
 def download_file_from_google_drive(file_id, destination):

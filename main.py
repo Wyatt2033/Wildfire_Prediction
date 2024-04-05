@@ -101,8 +101,8 @@ def update_weather_data():
 # Calls main() from main.py
 
 def main():
-    merge_data = pd.read_csv('datasets/merged_data.csv')
-    model_file_path = 'models/trained_model.pkl'
+    merge_data = pd.read_csv('./datasets/merged_data.csv')
+    model_file_path = './models/trained_model.pkl'
     if not os.path.exists(model_file_path):
         print('Model not found. Downloading model...')
         update_scheduler.download_file_from_google_drive()
