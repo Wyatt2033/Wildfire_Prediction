@@ -14,14 +14,12 @@ def get_cached_weather_data(lat, long):
 
     if os.path.exists(cache_file_path):
         with open(cache_file_path, 'r') as f:
-            file_content = f.read().strip()
-            if file_content:  # Check if file is not empty
-                f.seek(0)  # Reset file pointer to beginning
+            for line in f:
                 try:
-                    cache = json.load(f)
-                except json.JSONDecodeError:
-                    print(f"Error decoding JSON from file. File content: {file_content}")
-                    raise
+                    cache.update(json.loads(line))
+                except json.JSONDecodeError as e:
+                    print(f"Error decoding JSON from line: {line}. Error: {e}")
+                    continue
 
     if cache_key in cache:
         weather_data = pd.DataFrame(cache[cache_key])
@@ -30,6 +28,7 @@ def get_cached_weather_data(lat, long):
         cache[cache_key] = weather_data.to_dict(orient='records')
         with open(cache_file_path, 'w') as f:
             json.dump(cache, f)
+    weather_data = pd.DataFrame(weather_data)
     return weather_data
 
 

@@ -1,4 +1,8 @@
+import contextlib
 import io
+import os
+from multiprocessing import Pool
+
 import streamlit as st
 import pandas as pd
 import geopandas as gpd
@@ -12,10 +16,12 @@ from matplotlib.lines import Line2D
 import randomForest
 import weather
 
+
 class SizedLegend(Legend):
     def __init__(self, parent, handles, labels, *args, **kwargs):
         super().__init__(parent, handles, labels, *args, **kwargs)
         self.legendPatch.set_boxstyle("round,pad=0.02")
+
 
 def create_legend():
     fig, ax = plt.subplots()
@@ -32,8 +38,24 @@ def create_legend():
     st.image(buf, caption='Legend', use_column_width=True)
 
 
+def predict_and_plot(args):
+    county ,state, gdf_state = args
+    try:
+        lat, long = get_lat_long(county, state)
+        with open(os.devnull, 'w') as f, contextlib.redirect_stdout(f):
+            weather_data = weather.get_cached_weather_data(lat, long)
+
+        weather_data_averages = pd.DataFrame(weather_data.mean()).transpose()
+        wildfire_risk = randomForest.predict_wildfire_risk(weather_data_averages)
+        risk_color = 'red' if wildfire_risk[0] else 'green'
+        gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = risk_color
+    except Exception as e:
+        print(f"An error occurred while processing {county}, {state}: {e}")
+        gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = 'white'
+    return gdf_state.loc[gdf_state['NAME'].str.contains(county)]
+
 def plot_fire_map(state, counties):
-    #create_legend()
+    # create_legend()
     state_fips = {
         "AL": "01", "AK": "02", "AZ": "04", "AR": "05", "CA": "06", "CO": "08", "CT": "09", "DE": "10", "FL": "12",
         "GA": "13", "HI": "15", "ID": "16", "IL": "17", "IN": "18", "IA": "19", "KS": "20", "KY": "21", "LA": "22",
@@ -49,6 +71,15 @@ def plot_fire_map(state, counties):
     gdf_state = gdf[gdf['STATEFP'] == state_fips[state]]
     gdf_state['NAME'] = gdf_state['NAME'].apply(standardize_county_name)
     gdf_state['risk_color'] = 'white'
+    gdf_state = gdf_state.copy()
+    gdf_states = []
+    with Pool() as p:
+        gdf_states = p.map(predict_and_plot, [(county, state, gdf_state.copy()) for county in counties])
+
+    gdf_state = pd.concat([gdf_state] + gdf_states)
+    print("Finished processing all counties")
+
+    # Plot map
     fig, ax = plt.subplots()
     plt.subplots_adjust(bottom=0.2)
     ax.axis('off')
@@ -56,53 +87,12 @@ def plot_fire_map(state, counties):
     fig.patch.set_facecolor('#0b0e12')
     red_patch = Line2D([0], [0], color='red', linewidth=5, label='High Risk')
     green_patch = Line2D([0], [0], color='green', linewidth=5, label='Low Risk')
-    legend = SizedLegend(ax, [red_patch, green_patch], ['High Risk', 'Low Risk'], loc='upper right', frameon=True, handlelength=0.5, prop={'size':4})
+    legend = SizedLegend(ax, [red_patch, green_patch], ['High Risk', 'Low Risk'], loc='upper right', frameon=True,
+                         handlelength=0.5, prop={'size': 4})
     ax.add_artist(legend)
-    county_numbers = {county: i for i, county in enumerate(counties)}
-    for county in counties:
-        matching_geometries = gdf_state.loc[gdf_state['NAME'].str.contains(county), 'geometry']
-        representative_point = matching_geometries.unary_union.representative_point()
-        offset = 0
-        ax.annotate(county_numbers[county], (representative_point.x + offset, representative_point.y), color='blue', fontsize=4, ha='left', va='center')
-    grid_layout = ""
-    for county, number in county_numbers.items():
 
-        grid_layout += f"| {county:<20}: {number:<5} "
-        if (number+1) % 6 == 0:
-            grid_layout += "\n"
-    list_placeholder.markdown(grid_layout)
-
-    for i, county in enumerate(counties):
-        lat, long = get_lat_long(county, state)
-        weather_data = weather.get_cached_weather_data(lat, long)
-        weather_data_averages = pd.DataFrame(weather_data.mean()).transpose()
-        wildfire_risk = randomForest.predict_wildfire_risk(weather_data_averages)
-        st.write(f"{county}, {state}: {wildfire_risk} risk of wildfire")
-        risk = "High" if wildfire_risk else "Low"
-
-        risk_color = 'red' if wildfire_risk[0] else 'green'
-
-        gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = risk_color
-        centroid = gdf_state.loc[gdf_state['NAME'].str.contains(county), 'geometry'].centroid
-
-        gdf_state.plot(ax=ax, color='yellow', edgecolor='black')  # Add edgecolor parameter here
-        gdf_state.plot(ax=ax, color=gdf_state['risk_color'], edgecolor='black')  # Add edgecolor parameter here
-        if i % 3 == 0:
-            plot_placeholder.pyplot(fig)
-
-        try:
-            cmap = ListedColormap(['yellow', 'red', 'green'])
-            gdf_state.plot(ax=ax, color='yellow')
-            gdf_state.plot(ax=ax, color=gdf_state['risk_color'])
-            gdf_state.plot(ax=ax, color='yellow', edgecolor='black')  # Add edgecolor parameter here
-            gdf_state.plot(ax=ax, color=gdf_state['risk_color'], edgecolor='black')  # Add edgecolor parameter here
-
-            gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = risk_color
-
-            ax.set_aspect('equal')
-
-        except ValueError:
-            ax.set_aspect('auto')
+    gdf_state.plot(ax=ax, color='yellow', edgecolor='black')  # Add edgecolor parameter here
+    gdf_state.plot(ax=ax, color=gdf_state['risk_color'], edgecolor='black')  # Add edgecolor parameter here
 
     buf = io.BytesIO()
     plt.savefig(buf, format='png')

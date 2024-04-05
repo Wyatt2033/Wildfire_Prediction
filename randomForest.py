@@ -53,6 +53,8 @@ def save_model(model):
 
 
 def predict_wildfire_risk(weather_data_averages):
+    if len(weather_data_averages) == 1:
+        weather_data_averages = weather_data_averages.iloc[[0]]
     with open('./models/trained_model.pkl', 'rb') as f:
         model = pickle.load(f)
     now = datetime.datetime.now()
