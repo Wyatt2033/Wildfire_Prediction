@@ -1,4 +1,4 @@
-
+import os
 import time
 
 import schedule
@@ -6,6 +6,7 @@ import schedule
 import data
 import geocoding
 import randomForest
+import update_scheduler
 import weather
 import streamlit as st
 import pandas as pd
@@ -101,6 +102,10 @@ def update_weather_data():
 
 def main():
     merge_data = pd.read_csv('datasets/merged_data.csv')
+    model_file_path = 'trained_model.pkl'
+    if not os.path.exists(model_file_path):
+        print('Model not found. Downloading model...')
+        update_scheduler.download_file_from_google_drive()
 
     state = st.selectbox('Select a state', state_names, key='state',
                          index=None)
