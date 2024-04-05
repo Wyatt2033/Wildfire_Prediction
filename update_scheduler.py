@@ -1,6 +1,6 @@
 import gdown
 
-file_id = "https://drive.google.com/file/d/1OuWtu2ojLQLdxnzMKm452rfaVH3crEWA/view?usp=drive_link"
+file_id = "1OuWtu2ojLQLdxnzMKm452rfaVH3crEWA"
 destination = ""
 
 
