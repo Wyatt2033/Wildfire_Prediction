@@ -1,5 +1,4 @@
 import gdown
-
 file_id = "1OuWtu2ojLQLdxnzMKm452rfaVH3crEWA"
 destination = "/models"
 
