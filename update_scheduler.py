@@ -1,17 +1,10 @@
-from google.cloud import storage
+import gdown
 
-def download_blob(bucket_name, source_blob_name, destination_file_name):
-    """Downloads a blob from the bucket."""
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(source_blob_name)
-    blob.download_to_filename(destination_file_name)
-
-    print(f"Blob {source_blob_name} downloaded to {destination_file_name}.")
+def download_file_from_google_drive(file_id, destination):
+    url = f"https://drive.google.com/uc?id={file_id}"
+    gdown.download(url, destination, quiet=False)
 
 
-bucket_name = "wildfire-risk-prediction"
-source_blob_name = "datasets/prep_saved_weather_train.csv"
-destination_file_name = "datasets/prep_saved_weather_train.csv"
-download_blob(bucket_name, source_blob_name, destination_file_name)
-
+file_id = "https://drive.google.com/file/d/1OuWtu2ojLQLdxnzMKm452rfaVH3crEWA/view?usp=drive_link"
+destination = ""
+download_file_from_google_drive(file_id, destination)

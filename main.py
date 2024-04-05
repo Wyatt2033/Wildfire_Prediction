@@ -72,7 +72,7 @@ def train_model(x_train, y_train, x_test, y_test):
 
 last_update_dates = {}
 def update_weather_data():
-    start_index = state_names.index("Texas")
+    start_index = state_names.index("Alaska")
     for state in state_names[start_index:]:
         state_abrev = geocoding.state_get_abrev(state)
         counties = data.get_counties_for_state(state_abrev)
@@ -111,7 +111,7 @@ def main():
         geocoding.plot_fire_map(state, counties)
 
     schedule.every().monday. do(update_weather_data)
-    update_weather_data()
+
     while True:
         schedule.run_pending()
         time.sleep(1)
