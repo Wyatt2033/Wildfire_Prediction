@@ -1,8 +1,10 @@
 import contextlib
 import io
 import os
-from multiprocessing import Pool
 
+import data
+import randomForest
+import weather
 import streamlit as st
 import pandas as pd
 import geopandas as gpd
@@ -12,9 +14,9 @@ from geopy.geocoders import GoogleV3
 from matplotlib.colors import ListedColormap
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
+from joblib import dump, load
+from multiprocessing import Pool
 
-import randomForest
-import weather
 
 
 class SizedLegend(Legend):
@@ -65,62 +67,74 @@ def plot_fire_map(state, counties):
         "OR": "41", "PA": "42", "RI": "44", "SC": "45", "SD": "46", "TN": "47", "TX": "48", "UT": "49", "VT": "50",
         "VA": "51", "WA": "53", "WV": "54", "WI": "55", "WY": "56"
     }
+    # Check if the map for this state has been generated since the last weather update.
+    map_filename = f'./map_data/{state}_map_data.csv'
+    if os.path.exists(map_filename):
+        buf = load(map_filename)
 
-    list_placeholder = st.empty()
-    plot_placeholder = st.empty()
-    gdf = gpd.read_file('map_data/cb_2018_us_county_5m.shp')
-    gdf_state = gdf[gdf['STATEFP'] == state_fips[state]]
-    gdf_state['NAME'] = gdf_state['NAME'].apply(standardize_county_name)
-    gdf_state['risk_color'] = 'white'
-    gdf_state = gdf_state.copy()
-    gdf_states = []
-    with Pool() as p:
-        gdf_states = p.map(predict_and_plot, [(county, state, gdf_state.copy()) for county in counties])
+    else:
 
-    gdf_state = pd.concat([gdf_state] + gdf_states)
-    print("Finished processing all counties")
+        list_placeholder = st.empty()
+        plot_placeholder = st.empty()
+        gdf = gpd.read_file('./map_data/cb_2018_us_county_5m.shp')
+        gdf_state = gdf[gdf['STATEFP'] == state_fips[state]]
+        gdf_state['NAME'] = gdf_state['NAME'].apply(standardize_county_name)
+        gdf_state['risk_color'] = 'white'
+        gdf_state = gdf_state.copy()
+        gdf_states = []
+        with Pool() as p:
+            gdf_states = p.map(predict_and_plot, [(county, state, gdf_state.copy()) for county in counties])
 
+        gdf_state = pd.concat([gdf_state] + gdf_states)
 
+        print("Finished processing all counties")
+        # Plot map
+        fig, ax = plt.subplots()
+        plt.subplots_adjust(bottom=0.2)
+        fig, ax = plt.subplots(figsize=(10, 10))
+        ax.axis('off')
+        ax.set_facecolor('#0b0e12')
+        fig.patch.set_facecolor('#0b0e12')
 
-    # Plot map
-    fig, ax = plt.subplots()
-    plt.subplots_adjust(bottom=0.2)
-    fig, ax = plt.subplots(figsize=(10, 10))
-    ax.axis('off')
-    ax.set_facecolor('#0b0e12')
-    fig.patch.set_facecolor('#0b0e12')
+        red_patch = Line2D([0], [0], color='red', linewidth=5, label='High Risk')
+        green_patch = Line2D([0], [0], color='green', linewidth=5, label='Low Risk')
+        legend = SizedLegend(ax, [red_patch, green_patch], ['High Risk', 'Low Risk'], loc='upper right', frameon=True,
+                             handlelength=0.5, prop={'size': 8})
+        ax.add_artist(legend)
 
-    red_patch = Line2D([0], [0], color='red', linewidth=5, label='High Risk')
-    green_patch = Line2D([0], [0], color='green', linewidth=5, label='Low Risk')
-    legend = SizedLegend(ax, [red_patch, green_patch], ['High Risk', 'Low Risk'], loc='upper right', frameon=True,
-                         handlelength=0.5, prop={'size': 8})
-    ax.add_artist(legend)
+        gdf_state.plot(ax=ax, color='yellow', edgecolor='black')  # Add edgecolor parameter here
+        gdf_state.plot(ax=ax, color=gdf_state['risk_color'], edgecolor='black')  # Add edgecolor parameter here
+        county_numbers = {county: i for i, county in enumerate(counties)}
+        for county in counties:
+            centroid = gdf_state.loc[gdf_state['NAME'].str.contains(county), 'geometry'].centroid
+            # ax.annotate(county, (centroid.x.iloc[0], centroid.y.iloc[0]), color='black', fontsize=4, ha='center')
+            matching_geometries = gdf_state.loc[gdf_state['NAME'].str.contains(county), 'geometry']
 
-    gdf_state.plot(ax=ax, color='yellow', edgecolor='black')  # Add edgecolor parameter here
-    gdf_state.plot(ax=ax, color=gdf_state['risk_color'], edgecolor='black')  # Add edgecolor parameter here
-    county_numbers = {county: i for i, county in enumerate(counties)}
-    for county in counties:
-        centroid = gdf_state.loc[gdf_state['NAME'].str.contains(county), 'geometry'].centroid
-       # ax.annotate(county, (centroid.x.iloc[0], centroid.y.iloc[0]), color='black', fontsize=4, ha='center')
-        matching_geometries = gdf_state.loc[gdf_state['NAME'].str.contains(county), 'geometry']
-        representative_point = matching_geometries.unary_union.representative_point()
-        offset = 0
-        ax.annotate(county_numbers[county], (representative_point.x + offset, representative_point.y), color='blue',
-                    fontsize=8, ha='left', va='center')
-    grid_layout = ""
-    for county, number in county_numbers.items():
+            if not matching_geometries.empty:
+                representative_point = matching_geometries.unary_union.representative_point()
+                offset = 0
+                ax.annotate(county_numbers[county], (representative_point.x + offset, representative_point.y), color='blue',
+                        fontsize=8, ha='left', va='center')
+            else:
+                print(f"Could not find representative point for {county}")
+        grid_layout = ""
+        for county, number in county_numbers.items():
 
-        grid_layout += f"| {county:<20}: {number:<5} "
-        if (number + 1) % 6 == 0:
-            grid_layout += "\n"
-    list_placeholder.markdown(grid_layout)
+            grid_layout += f"| {county:<20}: {number:<5} "
+            if (number + 1) % 6 == 0:
+                grid_layout += "\n"
+        list_placeholder.markdown(grid_layout)
 
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
-    buf.seek(0)
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        dump(buf, map_filename)
 
     st.image(buf, caption='Wildfire Risk Map', use_column_width=True)
 
+def country_fire_map (states):
+    state_abrev = state_get_abrev(states)
+    counties = data.get_counties_for_state()
 
 def get_lat_long(county_name, state_name):
     geolocator = GoogleV3(api_key='AIzaSyBxIbGubpa41aTqVXdpFSzHfzaYibiXe6M')
