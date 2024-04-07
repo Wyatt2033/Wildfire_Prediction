@@ -2,6 +2,8 @@ import contextlib
 import io
 import os
 
+import joblib
+
 import data
 import randomForest
 import weather
@@ -16,7 +18,6 @@ from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
 from joblib import dump, load
 from multiprocessing import Pool
-
 
 
 class SizedLegend(Legend):
@@ -71,6 +72,15 @@ def plot_fire_map(state, counties):
     map_filename = f'./map_data/{state}_map_data.csv'
     if os.path.exists(map_filename):
         buf = load(map_filename)
+        grid_layout = ""
+        county_numbers = {county: i for i, county in enumerate(counties)}
+        for county, number in county_numbers.items():
+
+            grid_layout += f"| {county:<20}: {number:<5} "
+            if (number + 1) % 6 == 0:
+                grid_layout += "\n"
+        list_placeholder = st.empty()
+        list_placeholder.markdown(grid_layout)
 
     else:
 
@@ -113,8 +123,9 @@ def plot_fire_map(state, counties):
             if not matching_geometries.empty:
                 representative_point = matching_geometries.unary_union.representative_point()
                 offset = 0
-                ax.annotate(county_numbers[county], (representative_point.x + offset, representative_point.y), color='blue',
-                        fontsize=8, ha='left', va='center')
+                ax.annotate(county_numbers[county], (representative_point.x + offset, representative_point.y),
+                            color='blue',
+                            fontsize=8, ha='left', va='center')
             else:
                 print(f"Could not find representative point for {county}")
         grid_layout = ""
@@ -132,9 +143,97 @@ def plot_fire_map(state, counties):
 
     st.image(buf, caption='Wildfire Risk Map', use_column_width=True)
 
-def country_fire_map (states):
-    state_abrev = state_get_abrev(states)
-    counties = data.get_counties_for_state()
+
+def country_fire_map():
+    # List of all state abbreviations
+    state_abrevs = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS",
+                    "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY",
+                    "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV",
+                    "WI", "WY"]
+
+    # Initialize an empty list to store the GeoDataFrames
+    gdfs = []
+    print("Generating map data for all states")
+    # Loop over each state abbreviation
+    for state_abrev in state_abrevs:
+        print(f"Generating map data for {state_abrev}")
+        # Construct the filename of the cache file
+        filename = f'./map_data/{state_abrev}_map_data.joblib'
+
+        # Check if the file exists
+        if os.path.exists(filename):
+            # Load the data from the cache file
+            gdf = joblib.load(filename)
+        else:
+            # Generate the data required for the map
+            gdf = generate_map_data(state_abrev)
+
+            # Save the data into a cache file
+            joblib.dump(gdf, filename)
+
+        # Append the GeoDataFrame to the list
+        gdfs.append(gdf)
+
+    # Concatenate all the GeoDataFrames into a single GeoDataFrame
+    gdf_us = pd.concat(gdfs)
+
+    # Plot the combined GeoDataFrame as a heatmap
+    fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+    gdf_us.plot(column='risk_color', ax=ax, legend=True, cmap='coolwarm')
+
+    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+    gdf_us.plot(column='risk_color', ax=ax, legend=True, cmap='coolwarm')
+
+
+    ax.axis('off')
+    ax.set_facecolor('#0b0e12')
+    fig.patch.set_facecolor('#0b0e12')
+
+    plt.show()
+    # Display the plot in Streamlit
+    st.pyplot(fig)
+
+def generate_map_data(state_abrev):
+    # Define the state FIPS codes
+    state_fips = {
+        "AL": "01", "AK": "02", "AZ": "04", "AR": "05", "CA": "06", "CO": "08", "CT": "09", "DE": "10", "FL": "12",
+        "GA": "13", "HI": "15", "ID": "16", "IL": "17", "IN": "18", "IA": "19", "KS": "20", "KY": "21", "LA": "22",
+        "ME": "23", "MD": "24", "MA": "25", "MI": "26", "MN": "27", "MS": "28", "MO": "29", "MT": "30", "NE": "31",
+        "NV": "32", "NH": "33", "NJ": "34", "NM": "35", "NY": "36", "NC": "37", "ND": "38", "OH": "39", "OK": "40",
+        "OR": "41", "PA": "42", "RI": "44", "SC": "45", "SD": "46", "TN": "47", "TX": "48", "UT": "49", "VT": "50",
+        "VA": "51", "WA": "53", "WV": "54", "WI": "55", "WY": "56"
+    }
+
+    # Read the shapefile
+    gdf = gpd.read_file('./map_data/cb_2018_us_county_5m.shp')
+
+    # Filter the GeoDataFrame for the specific state
+    gdf_state = gdf[gdf['STATEFP'] == state_fips[state_abrev]]
+
+    # Standardize the county names
+    gdf_state['NAME'] = gdf_state['NAME'].apply(standardize_county_name)
+
+    # Initialize the risk color column
+    gdf_state['risk_color'] = 'white'
+
+    # Make a copy of the GeoDataFrame
+    gdf_state = gdf_state.copy()
+
+    # Get the counties for the state
+    counties = data.get_counties_for_state(state_abrev)
+
+    # Standardize the county names
+    counties = [standardize_county_name(county) for county in counties]
+
+    # Predict the wildfire risk for each county and plot the results
+    with Pool() as p:
+        gdf_states = p.map(predict_and_plot, [(county, state_abrev, gdf_state.copy()) for county in counties])
+
+    # Concatenate the results
+    gdf_state = pd.concat([gdf_state] + gdf_states)
+
+    return gdf_state
+
 
 def get_lat_long(county_name, state_name):
     geolocator = GoogleV3(api_key='AIzaSyBxIbGubpa41aTqVXdpFSzHfzaYibiXe6M')

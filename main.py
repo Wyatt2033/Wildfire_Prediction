@@ -122,6 +122,7 @@ def main():
         print('Model not found. Downloading model...')
         update_scheduler.download_file_from_google_drive()
 
+    geocoding.country_fire_map()
 
     state = st.selectbox('Select a state', state_names, key='state',
                          index=None)
