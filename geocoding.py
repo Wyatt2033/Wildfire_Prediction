@@ -1,6 +1,7 @@
 import contextlib
 import io
 import os
+import warnings
 
 import joblib
 
@@ -42,26 +43,46 @@ def create_legend():
 
 
 def predict_and_plot(args):
+    warnings.filterwarnings("ignore", category=FutureWarning)
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
     county, state, gdf_state = args
     try:
         lat, long = get_lat_long(county, state)
+        if lat is None or long is None:
+            print(f"Latitude and longitude not found for {county}, {state}")
+            return
         with open(os.devnull, 'w') as f, contextlib.redirect_stdout(f):
             weather_data = weather.get_cached_weather_data(lat, long)
 
         weather_data_averages = pd.DataFrame(weather_data.mean()).transpose()
         wildfire_risk = randomForest.predict_wildfire_risk(weather_data_averages)
         risk_color = 'red' if wildfire_risk[0] else 'green'
-        gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = risk_color
+        if gdf_state['NAME'].str.contains(county).any():
+            gdf_state.loc[
+                gdf_state['NAME'].str.contains(county), 'risk_color'] = risk_color
+            #print(f"Assigned color {risk_color} for {county}, {state}")
+        else:
+            print(f"County name {county} does not match in the GeoDataFrame")
+        # Check for duplicate rows in the gdf_state DataFrame
+        duplicate_rows = gdf_state[gdf_state.duplicated(['NAME'], keep=False)]
+
+        if not duplicate_rows.empty:
+            print("Duplicate rows in gdf_state:")
+            print(duplicate_rows)
+        return gdf_state.loc[gdf_state['NAME'].str.contains(county) & gdf_state['risk_color'].notna()]
+
+
     except Exception as e:
         print(f"An error occurred while processing {county}, {state}: {e}")
-        gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = 'white'
-    return gdf_state.loc[gdf_state['NAME'].str.contains(county)]
+        gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = 'orange'
 
+        # Only return the modified row for the county
+        return gdf_state.loc[gdf_state['NAME'].str.contains(county) & gdf_state['risk_color'].notna()]
 
 def plot_fire_map(state, counties):
     # create_legend()
     state_fips = {
-        "AL": "01", "AK": "02", "AZ": "04", "AR": "05", "CA": "06", "CO": "08", "CT": "09", "DE": "10", "FL": "12",
+        "AL": "01", "AZ": "04", "AR": "05", "CA": "06", "CO": "08", "CT": "09", "DE": "10", "FL": "12",
         "GA": "13", "HI": "15", "ID": "16", "IL": "17", "IN": "18", "IA": "19", "KS": "20", "KY": "21", "LA": "22",
         "ME": "23", "MD": "24", "MA": "25", "MI": "26", "MN": "27", "MS": "28", "MO": "29", "MT": "30", "NE": "31",
         "NV": "32", "NH": "33", "NJ": "34", "NM": "35", "NY": "36", "NC": "37", "ND": "38", "OH": "39", "OK": "40",
@@ -81,6 +102,8 @@ def plot_fire_map(state, counties):
                 grid_layout += "\n"
         list_placeholder = st.empty()
         list_placeholder.markdown(grid_layout)
+        print(f"Data for {state}:")
+        print(state)
 
     else:
 
@@ -96,6 +119,7 @@ def plot_fire_map(state, counties):
             gdf_states = p.map(predict_and_plot, [(county, state, gdf_state.copy()) for county in counties])
 
         gdf_state = pd.concat([gdf_state] + gdf_states)
+        joblib.dump(gdf_state, map_filename)
 
         print("Finished processing all counties")
         # Plot map
@@ -112,7 +136,6 @@ def plot_fire_map(state, counties):
                              handlelength=0.5, prop={'size': 8})
         ax.add_artist(legend)
 
-        gdf_state.plot(ax=ax, color='yellow', edgecolor='black')  # Add edgecolor parameter here
         gdf_state.plot(ax=ax, color=gdf_state['risk_color'], edgecolor='black')  # Add edgecolor parameter here
         county_numbers = {county: i for i, county in enumerate(counties)}
         for county in counties:
@@ -139,14 +162,20 @@ def plot_fire_map(state, counties):
         buf = io.BytesIO()
         plt.savefig(buf, format='png')
         buf.seek(0)
-        dump(buf, map_filename)
+        joblib.dump(buf, map_filename)
+        buf = joblib.load(map_filename)
+        # Ensure that buf contains image data
+        if isinstance(buf, io.BytesIO):
+            st.image(buf, caption='Wildfire Risk Map', use_column_width=True)
+        else:
+            print("Error: buf does not contain image data")
 
     st.image(buf, caption='Wildfire Risk Map', use_column_width=True)
 
 
 def country_fire_map():
     # List of all state abbreviations
-    state_abrevs = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS",
+    state_abrevs = ["AL", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "ID", "IL", "IN", "IA", "KS",
                     "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY",
                     "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV",
                     "WI", "WY"]
@@ -164,10 +193,13 @@ def country_fire_map():
         if os.path.exists(filename):
             # Load the data from the cache file
             gdf = joblib.load(filename)
+
+
         else:
             # Generate the data required for the map
             gdf = generate_map_data(state_abrev)
-
+            print(f"Data for {state_abrev}:")
+            print(gdf['risk_color'].value_counts())
             # Save the data into a cache file
             joblib.dump(gdf, filename)
 
@@ -176,28 +208,39 @@ def country_fire_map():
 
     # Concatenate all the GeoDataFrames into a single GeoDataFrame
     gdf_us = pd.concat(gdfs)
+    print("Data for the entire country:")
+    print(gdf_us['risk_color'].value_counts())
+    #print(gdf_us)
+    minx, miny, maxx, maxy = -125, 24, -66, 50
 
+    # Exclude outliers
+    gdf_us = gdf_us.cx[minx:maxx, miny:maxy]
     # Plot the combined GeoDataFrame as a heatmap
+    cmap = ListedColormap(['green', 'white', 'red'])
     fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-    gdf_us.plot(column='risk_color', ax=ax, legend=True, cmap='coolwarm')
+    gdf_us.plot(column='risk_color', ax=ax, legend=True, cmap=cmap)
 
-    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
-    gdf_us.plot(column='risk_color', ax=ax, legend=True, cmap='coolwarm')
+    fig, ax = plt.subplots(1, 1, figsize=(20, 20))
+    gdf_us.plot(column='risk_color', ax=ax, legend=True, cmap=cmap)
 
-
-    ax.axis('off')
     ax.set_facecolor('#0b0e12')
+
     fig.patch.set_facecolor('#0b0e12')
 
-    plt.show()
+    ax.set_xlim(gdf_us.geometry.bounds.minx.min(), gdf_us.geometry.bounds.maxx.max())
+    ax.set_ylim(gdf_us.geometry.bounds.miny.min(), gdf_us.geometry.bounds.maxy.max())
+
+    plt.axis('off')
+    # ax.set_position([0, 0, 1, 1])
     # Display the plot in Streamlit
-    st.pyplot(fig)
+    st.pyplot(fig, use_container_width=True)
+
 
 def generate_map_data(state_abrev):
     # Define the state FIPS codes
     state_fips = {
-        "AL": "01", "AK": "02", "AZ": "04", "AR": "05", "CA": "06", "CO": "08", "CT": "09", "DE": "10", "FL": "12",
-        "GA": "13", "HI": "15", "ID": "16", "IL": "17", "IN": "18", "IA": "19", "KS": "20", "KY": "21", "LA": "22",
+        "AL": "01", "AZ": "04", "AR": "05", "CA": "06", "CO": "08", "CT": "09", "DE": "10", "FL": "12",
+        "GA": "13", "ID": "16", "IL": "17", "IN": "18", "IA": "19", "KS": "20", "KY": "21", "LA": "22",
         "ME": "23", "MD": "24", "MA": "25", "MI": "26", "MN": "27", "MS": "28", "MO": "29", "MT": "30", "NE": "31",
         "NV": "32", "NH": "33", "NJ": "34", "NM": "35", "NY": "36", "NC": "37", "ND": "38", "OH": "39", "OK": "40",
         "OR": "41", "PA": "42", "RI": "44", "SC": "45", "SD": "46", "TN": "47", "TX": "48", "UT": "49", "VT": "50",
@@ -214,10 +257,12 @@ def generate_map_data(state_abrev):
     gdf_state['NAME'] = gdf_state['NAME'].apply(standardize_county_name)
 
     # Initialize the risk color column
-    gdf_state['risk_color'] = 'white'
+    #gdf_state['risk_color'] = 'orange'
 
     # Make a copy of the GeoDataFrame
-    gdf_state = gdf_state.copy()
+
+
+    gdf_state['risk_color'] = 'white'
 
     # Get the counties for the state
     counties = data.get_counties_for_state(state_abrev)
@@ -225,13 +270,34 @@ def generate_map_data(state_abrev):
     # Standardize the county names
     counties = [standardize_county_name(county) for county in counties]
 
-    # Predict the wildfire risk for each county and plot the results
-    with Pool() as p:
-        gdf_states = p.map(predict_and_plot, [(county, state_abrev, gdf_state.copy()) for county in counties])
+    # Remove duplicate county names
+    counties = list(set(counties))
+    # Print out the county names after standardization
+    print("County names after standardization:")
+    print(len(counties))
+    print(f"1 Data for {state_abrev}:")
+    print(gdf_state['risk_color'].value_counts())
 
+    gdf_states = [predict_and_plot((county, state_abrev, gdf_state.copy())) for county in counties]
+    print("County names after prediction:")
+    print(len(counties))
+    print(f"2 Data for {state_abrev}:")
+    print(gdf_state['risk_color'].value_counts())
     # Concatenate the results
-    gdf_state = pd.concat([gdf_state] + gdf_states)
+    gdf_state = pd.concat(gdf_states)
+    # Check for counties that did not get a risk color assigned
+    print(f"3 Data for {state_abrev}:")
+    print(gdf_state['risk_color'].value_counts())
 
+    missing_colors = gdf_state[gdf_state['risk_color'].isna()]
+    if not missing_colors.empty:
+        print("Counties missing risk color:")
+        print(missing_colors['NAME'])
+        print(len(missing_colors))
+        # Print out the county names in the GeoDataFrame
+        print("County names in GeoDataFrame:")
+        print(gdf_state['NAME'])
+        print(len(gdf_state['NAME']))
     return gdf_state
 
 

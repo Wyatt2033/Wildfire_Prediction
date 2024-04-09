@@ -1,6 +1,7 @@
 import os
 import time
 
+import joblib
 import schedule
 
 import data
@@ -14,8 +15,8 @@ import geopandas as gpd
 from sklearn.metrics import accuracy_score
 from datetime import datetime, timedelta
 
-state_names = ["Alaska", "Alabama", "Arkansas", "Arizona", "California", "Colorado",
-               "Connecticut", "Delaware", "Florida", "Georgia", "Hawaii",
+state_names = ["Alabama", "Arkansas", "Arizona", "California", "Colorado",
+               "Connecticut", "Delaware", "Florida", "Georgia",
                "Iowa", "Idaho", "Illinois", "Indiana", "Kansas", "Kentucky", "Louisiana", "Massachusetts", "Maryland",
                "Maine", "Michigan", "Minnesota", "Missouri", "Mississippi", "Montana", "North Carolina", "North Dakota",
                "Nebraska", "New Hampshire", "New Jersey", "New Mexico", "Nevada", "New York", "Ohio", "Oklahoma",
@@ -116,6 +117,7 @@ def update_state_cache():
 # Calls main() from main.py
 
 def main():
+
     merge_data = pd.read_csv('./datasets/merged_data.csv')
     model_file_path = './models/trained_model.pkl'
     if not os.path.exists(model_file_path):

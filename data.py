@@ -145,7 +145,9 @@ def get_counties_for_state(state):
         df = pd.read_csv('datasets/state_and_county_fips_master.csv')
         try:
             counties = df[df['STATE'] == state]['COUNTY'].unique()
-           # print(counties)
+            #print(counties)
+            size = len(counties)
+            #print(size)
 
             return counties
         except KeyError:

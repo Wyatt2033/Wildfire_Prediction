@@ -90,4 +90,5 @@ def predict_wildfire_risk(weather_data_averages):
     prediction = model.predict(data)
     probability = model.predict_proba(data)
     wildfire_probability = probability[0][1]
+
     return prediction, wildfire_probability
