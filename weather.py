@@ -8,7 +8,7 @@ from retry_requests import retry
 
 
 def get_cached_weather_data(lat, long):
-    cache_file_path = 'weather_cache.json'
+    cache_file_path = './cache/weather_cache/weather_cache.json'
     cache_key = f'{lat}_{long}'
     cache = {}
 

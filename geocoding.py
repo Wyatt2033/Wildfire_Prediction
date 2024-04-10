@@ -4,6 +4,7 @@ import os
 import warnings
 
 import joblib
+from geopy import Nominatim
 
 import data
 import randomForest
@@ -17,7 +18,7 @@ from geopy.geocoders import GoogleV3
 from matplotlib.colors import ListedColormap
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
-from joblib import dump, load
+from joblib import load
 from multiprocessing import Pool
 
 
@@ -47,7 +48,8 @@ def predict_and_plot(args):
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     county, state, gdf_state = args
     try:
-        lat, long = get_lat_long(county, state)
+        df = pd.read_csv('datasets/uscounties.csv')
+        lat, long = get_lat_long(df, county, state)
         if lat is None or long is None:
             print(f"Latitude and longitude not found for {county}, {state}")
             return
@@ -73,11 +75,12 @@ def predict_and_plot(args):
 
 
     except Exception as e:
-        print(f"An error occurred while processing {county}, {state}: {e}")
-        gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = 'orange'
+        error_message = f"An error occurred while processing {county}, {state}: {e}"
+        with open('error_log.txt', 'a') as f:
+            f.write(error_message + '\n')
+        print(error_message)
+        return gdf_state
 
-        # Only return the modified row for the county
-        return gdf_state.loc[gdf_state['NAME'].str.contains(county) & gdf_state['risk_color'].notna()]
 
 def plot_fire_map(state, counties):
     # create_legend()
@@ -90,7 +93,7 @@ def plot_fire_map(state, counties):
         "VA": "51", "WA": "53", "WV": "54", "WI": "55", "WY": "56"
     }
     # Check if the map for this state has been generated since the last weather update.
-    map_filename = f'./map_data/{state}_map_data.csv'
+    map_filename = f'./cache/weather_cache/{state}_map_data.csv'
     if os.path.exists(map_filename):
         buf = load(map_filename)
         grid_layout = ""
@@ -187,7 +190,7 @@ def country_fire_map():
     for state_abrev in state_abrevs:
         print(f"Generating map data for {state_abrev}")
         # Construct the filename of the cache file
-        filename = f'./map_data/{state_abrev}_map_data.joblib'
+        filename = f'./cache/state_data_cache/{state_abrev}_map_data.joblib'
 
         # Check if the file exists
         if os.path.exists(filename):
@@ -216,7 +219,7 @@ def country_fire_map():
     # Exclude outliers
     gdf_us = gdf_us.cx[minx:maxx, miny:maxy]
     # Plot the combined GeoDataFrame as a heatmap
-    cmap = ListedColormap(['green', 'white', 'red'])
+    cmap = ListedColormap(['green', 'red', 'white'])
     fig, ax = plt.subplots(1, 1, figsize=(5, 5))
     gdf_us.plot(column='risk_color', ax=ax, legend=True, cmap=cmap)
 
@@ -257,10 +260,9 @@ def generate_map_data(state_abrev):
     gdf_state['NAME'] = gdf_state['NAME'].apply(standardize_county_name)
 
     # Initialize the risk color column
-    #gdf_state['risk_color'] = 'orange'
+
 
     # Make a copy of the GeoDataFrame
-
 
     gdf_state['risk_color'] = 'white'
 
@@ -277,35 +279,53 @@ def generate_map_data(state_abrev):
     print(len(counties))
     print(f"1 Data for {state_abrev}:")
     print(gdf_state['risk_color'].value_counts())
+    for county in counties:
+        gdf_county = predict_and_plot((county, state_abrev, gdf_state.copy()))
+        if gdf_county is not None:
+            gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = gdf_county['risk_color']
 
-    gdf_states = [predict_and_plot((county, state_abrev, gdf_state.copy())) for county in counties]
-    print("County names after prediction:")
-    print(len(counties))
-    print(f"2 Data for {state_abrev}:")
-    print(gdf_state['risk_color'].value_counts())
-    # Concatenate the results
-    gdf_state = pd.concat(gdf_states)
-    # Check for counties that did not get a risk color assigned
-    print(f"3 Data for {state_abrev}:")
-    print(gdf_state['risk_color'].value_counts())
 
-    missing_colors = gdf_state[gdf_state['risk_color'].isna()]
-    if not missing_colors.empty:
-        print("Counties missing risk color:")
-        print(missing_colors['NAME'])
-        print(len(missing_colors))
-        # Print out the county names in the GeoDataFrame
-        print("County names in GeoDataFrame:")
-        print(gdf_state['NAME'])
-        print(len(gdf_state['NAME']))
     return gdf_state
 
 
-def get_lat_long(county_name, state_name):
+def get_lat_long_geolocator(county_name, state_name):
     geolocator = GoogleV3(api_key='AIzaSyBxIbGubpa41aTqVXdpFSzHfzaYibiXe6M')
     location = geolocator.geocode(f"{county_name}, {state_name}")
 
+    if location is None:
+        print(f"Could not find latitude and longitude for {county_name}, {state_name}, using GoogleV3 geocoder.")
+        print('Trying Nominatim geocoder')
+        geolocator = Nominatim(user_agent="geo_locator")
+        location = geolocator.geocode(f"{county_name}, {state_name}")
+        return location.latitude, location.longitude
+
+    if location is None:
+        print(f"Could not find latitude and longitude for {county_name}, {state_name}, using NOMINATIM.")
+        return None, None
+
     return (location.latitude, location.longitude)
+
+
+def get_lat_long(df, county_name, state_name):
+    print(county_name, state_name)
+
+    try:
+        row = df[(df['county'].str.contains(county_name)) & (df['state_id'] == state_name)]
+
+        if row.empty:
+            print(f"Could not find latitude and longitude for {county_name}, {state_name}, using CSV")
+            print(f"Trying GoogleV3 geocoder.")
+            geolocator = GoogleV3(api_key='AIzaSyBxIbGubpa41aTqVXdpFSzHfzaYibiXe6M')
+            location = geolocator.geocode(f"{county_name}, {state_name}")
+            return location.latitude, location.longitude
+
+
+    except KeyError:
+        print(f"Could not find latitude and longitude for {county_name}, {state_name}")
+        return None, None
+
+    print(row['lat'].values[0], row['lng'].values[0])
+    return row['lat'].values[0], row['lng'].values[0]
 
 
 def standardize_county_name(county_name):
@@ -322,7 +342,6 @@ def standardize_county_name(county_name):
 def state_get_abrev(state):
     state_abrev = {
         "Alabama": "AL",
-        "Alaska": "AK",
         "Arizona": "AZ",
         "Arkansas": "AR",
         "California": "CA",

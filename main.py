@@ -31,7 +31,7 @@ This is a web app to predict the risk of wildfires in the United States.
 
     """)
 
-gdf = gpd.read_file('map_data/cb_2018_us_county_5m.shp')
+gdf = gpd.read_file('./map_data/cb_2018_us_county_5m.shp')
 print(gdf.columns)
 
 
@@ -76,7 +76,7 @@ last_update_dates = {}
 
 
 def update_weather_data():
-    start_index = state_names.index("Alaska")
+    start_index = state_names.index("Alabama")
     for state in state_names[start_index:]:
         state_abrev = geocoding.state_get_abrev(state)
         counties = data.get_counties_for_state(state_abrev)
@@ -84,7 +84,8 @@ def update_weather_data():
         for county in counties:
             try:
                 county = geocoding.standardize_county_name(county)
-                lat_long = geocoding.get_lat_long(county, state)
+                df = pd.read_csv('datasets/uscounties.csv')
+                lat_long = geocoding.get_lat_long(df, county, state_abrev)
                 if lat_long is None:
                     print(f"Could not find latitude and longitude for {county}, {state}")
                     continue
@@ -104,7 +105,7 @@ def update_weather_data():
 
 def update_state_cache():
     for state in state_names:
-        map_filename = f'{state}_map.joblib'
+        map_filename = f'./cache/state_data_cache/{state}_map.joblib'
         if os.path.exists(map_filename):
             os.remove(map_filename)
     for state in state_names:
@@ -125,6 +126,7 @@ def main():
         update_scheduler.download_file_from_google_drive()
 
     geocoding.country_fire_map()
+    #update_weather_data()
 
     state = st.selectbox('Select a state', state_names, key='state',
                          index=None)
