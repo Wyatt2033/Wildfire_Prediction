@@ -58,7 +58,7 @@ def predict_and_plot(args):
 
         weather_data_averages = pd.DataFrame(weather_data.mean()).transpose()
         wildfire_risk = randomForest.predict_wildfire_risk(weather_data_averages)
-        risk_color = 'red' if wildfire_risk[0] else 'green'
+        risk_color = 'white' if wildfire_risk[0] else 'red'
         if gdf_state['NAME'].str.contains(county).any():
             gdf_state.loc[
                 gdf_state['NAME'].str.contains(county), 'risk_color'] = risk_color
@@ -182,7 +182,14 @@ def country_fire_map():
                     "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY",
                     "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV",
                     "WI", "WY"]
-
+    state_fips = {
+        "AL": "01", "AZ": "04", "AR": "05", "CA": "06", "CO": "08", "CT": "09", "DE": "10", "FL": "12",
+        "GA": "13", "ID": "16", "IL": "17", "IN": "18", "IA": "19", "KS": "20", "KY": "21", "LA": "22",
+        "ME": "23", "MD": "24", "MA": "25", "MI": "26", "MN": "27", "MS": "28", "MO": "29", "MT": "30", "NE": "31",
+        "NV": "32", "NH": "33", "NJ": "34", "NM": "35", "NY": "36", "NC": "37", "ND": "38", "OH": "39", "OK": "40",
+        "OR": "41", "PA": "42", "RI": "44", "SC": "45", "SD": "46", "TN": "47", "TX": "48", "UT": "49", "VT": "50",
+        "VA": "51", "WA": "53", "WV": "54", "WI": "55", "WY": "56"
+    }
     # Initialize an empty list to store the GeoDataFrames
     gdfs = []
     print("Generating map data for all states")
@@ -213,19 +220,27 @@ def country_fire_map():
     gdf_us = pd.concat(gdfs)
     print("Data for the entire country:")
     print(gdf_us['risk_color'].value_counts())
+    white_counties = gdf_us.loc[gdf_us['risk_color'] == 'white', 'NAME']
+    print(white_counties)
+
+    gdf_us['state_fips'] = gdf_us['STATEFP']
+    # Group the GeoDataFrame by state and calculate the centroid of each state
+    gdf_us['centroid'] = gdf_us.geometry.centroid
+    gdf_states = gdf_us.dissolve(by='STATEFP', aggfunc='first')
     #print(gdf_us)
     minx, miny, maxx, maxy = -125, 24, -66, 50
 
     # Exclude outliers
     gdf_us = gdf_us.cx[minx:maxx, miny:maxy]
-    # Plot the combined GeoDataFrame as a heatmap
-    cmap = ListedColormap(['green', 'red', 'white'])
-    fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-    gdf_us.plot(column='risk_color', ax=ax, legend=True, cmap=cmap)
-
+    # Plot the combined GeoDataFrame
+    cmap = ListedColormap(['white', 'red'])
     fig, ax = plt.subplots(1, 1, figsize=(20, 20))
     gdf_us.plot(column='risk_color', ax=ax, legend=True, cmap=cmap)
+    gdf_us.boundary.plot(ax=ax, color='black', linewidth=0.5)
+    gdf_states.boundary.plot(ax=ax, color='black', linewidth=2)
 
+    for x, y, label in zip(gdf_states.centroid.x, gdf_states.centroid.y, gdf_states.index):
+        ax.text(x, y, label, color='blue', fontsize=26)
     ax.set_facecolor('#0b0e12')
 
     fig.patch.set_facecolor('#0b0e12')
@@ -261,7 +276,6 @@ def generate_map_data(state_abrev):
 
     # Initialize the risk color column
 
-
     # Make a copy of the GeoDataFrame
 
     gdf_state['risk_color'] = 'white'
@@ -279,10 +293,21 @@ def generate_map_data(state_abrev):
     print(len(counties))
     print(f"1 Data for {state_abrev}:")
     print(gdf_state['risk_color'].value_counts())
+    # Run the prediction for all counties
     for county in counties:
         gdf_county = predict_and_plot((county, state_abrev, gdf_state.copy()))
         if gdf_county is not None:
             gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = gdf_county['risk_color']
+
+    # Identify the counties that are still marked as 'white'
+    white_counties = gdf_state.loc[gdf_state['risk_color'] == 'white', 'NAME']
+
+    # Run the prediction again for the 'white' counties
+    for county in white_counties:
+        gdf_county = predict_and_plot((county, state_abrev, gdf_state.copy()))
+        if gdf_county is not None:
+            gdf_state.loc[gdf_state['NAME'].str.contains(county), 'risk_color'] = gdf_county['risk_color']
+
 
 
     return gdf_state
@@ -329,7 +354,8 @@ def get_lat_long(df, county_name, state_name):
 
 
 def standardize_county_name(county_name):
-    suffixes = [" County", " Parish", " Borough", " City", " Municipality", " Census Area", " Area", " and"]
+    suffixes = [" County", " Parish", " Borough", " City", " Municipality", " Census Area", " Area", " and", "City",
+                "city"]
     for suffix in suffixes:
         if suffix in county_name:
             county_name = county_name.replace(suffix, "")
