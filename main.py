@@ -1,9 +1,10 @@
 import os
+import threading
 import time
 
 import joblib
 import schedule
-
+import datetime
 import data
 import geocoding
 import randomForest
@@ -13,7 +14,6 @@ import streamlit as st
 import pandas as pd
 import geopandas as gpd
 from sklearn.metrics import accuracy_score
-from datetime import datetime, timedelta
 
 state_names = ["Alabama", "Arkansas", "Arizona", "California", "Colorado",
                "Connecticut", "Delaware", "Florida", "Georgia",
@@ -92,42 +92,85 @@ def update_weather_data():
                 lat, long = lat_long
                 last_update_date = last_update_dates.get(county)
 
-                if last_update_date is not None and datetime.now() - last_update_date < timedelta(weeks=1):
+                if last_update_date is not None and datetime.datetime.now() - last_update_date < datetime.timedelta(
+                        weeks=1):
                     print(f"Skipping update for {county}, {state} as the data is newer than a week")
                     continue
 
                 weather_data = weather.get_cached_weather_data(lat, long)
                 last_update_dates[county] = datetime.now()
-                update_state_cache()
+
             except Exception as e:
                 print(f"An error occurred while updating weather data for {county}, {state}: {e}")
+        break
+    update_state_cache()
 
 
 def update_state_cache():
-    for state in state_names:
-        map_filename = f'./cache/state_data_cache/{state}_map.joblib'
+    start_index = state_names.index("Alabama")
+    for state in state_names[start_index:]:
+
+        state_abrev = geocoding.state_get_abrev(state)
+        map_filename = f'./cache/state_data_cache/{state_abrev}_map_data.joblib'
         if os.path.exists(map_filename):
             os.remove(map_filename)
-    for state in state_names:
-        state_abrev = geocoding.state_get_abrev(state)
-        counties = data.get_counties_for_state(state_abrev)
-        counties = [geocoding.standardize_county_name(county) for county in counties]
-        geocoding.plot_fire_map(state_abrev, counties)
+
+        new_data = geocoding.generate_map_data(state_abrev)
+        joblib.dump(new_data, map_filename)
 
 
-# Calls main() from main.py
+last_run_date = None
+
+def get_average_weather(county, state):
+    df = pd.read_csv('datasets/uscounties.csv')
+    lat_long = geocoding.get_lat_long(df, county, state)
+    if lat_long is None:
+        print(f"Could not find latitude and longitude for {county}, {state}")
+        return None
+    lat, long = lat_long
+    weather_data = weather.get_cached_weather_data(lat, long)
+    last_30_days = weather_data.tail(30)
+    average_weather = {
+        'Average max temperature': f"{round(last_30_days['temperature_2m_max'].mean(), 1)} °C",
+        'Average minimum temperature': f"{round(last_30_days['temperature_2m_min'].mean(), 1)} °C",
+        'Average precipitation': f"{round(last_30_days['precipitation_sum'].mean(), 1)} mm",
+        'Average max wind speed': f"{round(last_30_days['wind_speed_10m_max'].mean(), 1)} km/h",
+        'Average max wind gust speed': f"{round(last_30_days['wind_gusts_10m_max'].mean(), 1)} km/h",
+        'Average surface pressure': f"{round(last_30_days['surface_pressure'].mean(), 1)} hPa",
+        'Average humidity': f"{round(last_30_days['relative_humidity_2m'].mean(), 1)}%",
+        'Average dew point': f"{round(last_30_days['dew_point_2m'].mean(), 1)} °C"
+    }
+    return average_weather
+
+
+
+
+def listen():
+    global last_run_date
+    # Get the current date
+    current_date = datetime.date.today()
+    # If the function has not been run today
+    if last_run_date != current_date:
+        print('Updating weather data...')
+        update_weather_data()
+        # Update the last run date
+        last_run_date = current_date
+
+
 
 def main():
-
+    accuracy = randomForest.print_accuracy()
+    st.write(f'The accuracy of the wildfire risk condition prediction is {accuracy * 100:.2f}%')
     merge_data = pd.read_csv('./datasets/merged_data.csv')
     model_file_path = './models/trained_model.pkl'
     if not os.path.exists(model_file_path):
         print('Model not found. Downloading model...')
         update_scheduler.download_file_from_google_drive()
-
+    st.write('This is an overall view of the contiguous United States. The map shows counties with conditions that '
+             'favor wildfires.')
     geocoding.country_fire_map()
     #update_weather_data()
-
+    st.write('For a more detailed view of a state, please select one below.')
     state = st.selectbox('Select a state', state_names, key='state',
                          index=None)
     if state:
@@ -135,13 +178,14 @@ def main():
         counties = data.get_counties_for_state(state)
         counties = [geocoding.standardize_county_name(county) for county in counties]
         geocoding.plot_fire_map(state, counties)
-
-    schedule.every().monday.do(update_weather_data)
-
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
-
+        st.write(f'For a 30-day average weather data for a specific county in {state}, please select one below.')
+        county = st.selectbox('Select a county', counties, key='county', index=None)
+        if county:
+            geocoding.get_chart_data(county, state)
+            average_temperature = get_average_weather(county, state)
+            st.write(f'The 30-day average weather data for {county}, {state} is:')
+            for variable, value in average_temperature.items():
+                st.write(f'{variable}: {value}')
 
 # Calls main() when the script is run
 if __name__ == "__main__":

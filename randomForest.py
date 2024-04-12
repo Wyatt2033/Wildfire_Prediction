@@ -1,6 +1,7 @@
 import datetime
 import pickle
 
+import joblib
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.metrics import mean_squared_error, accuracy_score
@@ -52,6 +53,49 @@ def save_model(model):
     return model
 
 
+def print_accuracy():
+    # Load the model
+    model = joblib.load('./models/trained_model.pkl')
+
+    # Load the data
+    merged_data = pd.read_csv('./datasets/merged_data.csv')
+
+    merged_data['WILDFIRE_OCCURRENCE'] = merged_data['FIRE_SIZE'] > merged_data['FIRE_SIZE'].quantile(0.75).astype(int)
+    merged_data['DATE'] = pd.to_datetime(merged_data['DATE'])
+    merged_data['MONTH'] = merged_data['DATE'].dt.month
+    merged_data['DAY_OF_YEAR'] = merged_data['DATE'].dt.dayofyear
+
+    features = [
+        'T2M',  # Temperature at 2 Meters
+        'T2M_MAX',  # Maximum Temperature at 2 Meters
+        'T2M_MIN',  # Minimum Temperature at 2 Meters
+        'T2M_RANGE',  # Temperature Range at 2 Meters
+        'T2MDEW',  # Dew/Frost Point at 2 Meters
+        'WS10M',  # Wind Speed at 10 Meters
+        'WS10M_MAX',  # Maximum Wind Speed at 10 Meters
+        'WS10M_RANGE',  # Wind Speed Range at 10 Meters
+        'QV2M',  # Specific Humidity at 2 Meters
+        'PRECTOT',  # Total Precipitation
+        'PS',  # Surface Pressure
+        'MONTH',  # Month extracted from DATE
+        'DAY_OF_YEAR'  # Day of the year extracted from DATE
+    ]
+    X = merged_data[features]
+    y = merged_data['WILDFIRE_OCCURRENCE']
+
+    # Split the data into training set and test set
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Use the model to predict the wildfire risks for the test set
+    y_pred = model.predict(X_test)
+
+    # Calculate the accuracy
+    accuracy = accuracy_score(y_test, y_pred)
+
+    # Print the accuracy
+    print(f'The accuracy of the wildfire risk prediction is {accuracy * 100:.2f}%')
+
+    return  accuracy
 def predict_wildfire_risk(weather_data_averages):
     if len(weather_data_averages) == 1:
         weather_data_averages = weather_data_averages.iloc[[0]]

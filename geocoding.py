@@ -35,8 +35,8 @@ def create_legend():
     fig.patch.set_facecolor('#0b0e12')
     ax.set_facecolor('#0b0e12')
     red_patch = mpatches.Patch(color='red', label='High Risk')
-    green_patch = mpatches.Patch(color='green', label='Low Risk')
-    ax.legend(handles=[red_patch, green_patch], loc='upper right')
+    blue_patch = mpatches.Patch(color='blue', label='Low Risk')
+    ax.legend(handles=[red_patch, blue_patch], loc='upper right')
     buf = io.BytesIO()
     plt.savefig(buf, format='png')
     buf.seek(0)
@@ -58,7 +58,7 @@ def predict_and_plot(args):
 
         weather_data_averages = pd.DataFrame(weather_data.mean()).transpose()
         wildfire_risk = randomForest.predict_wildfire_risk(weather_data_averages)
-        risk_color = 'white' if wildfire_risk[0] else 'red'
+        risk_color = 'red' if wildfire_risk[0] else 'blue'
         if gdf_state['NAME'].str.contains(county).any():
             gdf_state.loc[
                 gdf_state['NAME'].str.contains(county), 'risk_color'] = risk_color
@@ -134,8 +134,8 @@ def plot_fire_map(state, counties):
         fig.patch.set_facecolor('#0b0e12')
 
         red_patch = Line2D([0], [0], color='red', linewidth=5, label='High Risk')
-        green_patch = Line2D([0], [0], color='green', linewidth=5, label='Low Risk')
-        legend = SizedLegend(ax, [red_patch, green_patch], ['High Risk', 'Low Risk'], loc='upper right', frameon=True,
+        blue_patch = Line2D([0], [0], color='blue', linewidth=5, label='Low Risk')
+        legend = SizedLegend(ax, [red_patch, blue_patch], ['High Risk', 'Low Risk'], loc='upper right', frameon=True,
                              handlelength=0.5, prop={'size': 8})
         ax.add_artist(legend)
 
@@ -150,7 +150,7 @@ def plot_fire_map(state, counties):
                 representative_point = matching_geometries.unary_union.representative_point()
                 offset = 0
                 ax.annotate(county_numbers[county], (representative_point.x + offset, representative_point.y),
-                            color='blue',
+                            color='white',
                             fontsize=8, ha='left', va='center')
             else:
                 print(f"Could not find representative point for {county}")
@@ -168,12 +168,9 @@ def plot_fire_map(state, counties):
         joblib.dump(buf, map_filename)
         buf = joblib.load(map_filename)
         # Ensure that buf contains image data
-        if isinstance(buf, io.BytesIO):
-            st.image(buf, caption='Wildfire Risk Map', use_column_width=True)
-        else:
-            print("Error: buf does not contain image data")
 
     st.image(buf, caption='Wildfire Risk Map', use_column_width=True)
+
 
 
 def country_fire_map():
@@ -190,6 +187,19 @@ def country_fire_map():
         "OR": "41", "PA": "42", "RI": "44", "SC": "45", "SD": "46", "TN": "47", "TX": "48", "UT": "49", "VT": "50",
         "VA": "51", "WA": "53", "WV": "54", "WI": "55", "WY": "56"
     }
+    # Print out the state abbreviation and its corresponding FIPS number
+    grid_layout = ""
+    i = 0
+    for state_abrev, fips_number in state_fips.items():
+        grid_layout += f"| {state_abrev:<6}: {fips_number:<6} "
+        if (int(i) + 1) % 6 == 0:
+            i = i + 1
+            grid_layout += "\n"
+    list_placeholder = st.empty()
+    list_placeholder.markdown(grid_layout)
+
+
+
     # Initialize an empty list to store the GeoDataFrames
     gdfs = []
     print("Generating map data for all states")
@@ -233,14 +243,20 @@ def country_fire_map():
     # Exclude outliers
     gdf_us = gdf_us.cx[minx:maxx, miny:maxy]
     # Plot the combined GeoDataFrame
-    cmap = ListedColormap(['white', 'red'])
+    cmap = ListedColormap(['blue', 'red'])
     fig, ax = plt.subplots(1, 1, figsize=(20, 20))
     gdf_us.plot(column='risk_color', ax=ax, legend=True, cmap=cmap)
     gdf_us.boundary.plot(ax=ax, color='black', linewidth=0.5)
     gdf_states.boundary.plot(ax=ax, color='black', linewidth=2)
+    # Adjust the legend
+    white_patch = Line2D([0], [0], color='blue', linewidth=5, label='Low Risk')
+    red_patch = Line2D([0], [0], color='red', linewidth=5, label='High Risk')
+    legend = plt.legend(handles=[white_patch, red_patch], loc='upper right', frameon=True, handlelength=0.5,
+                        prop={'size': 14})
+    #ax.add_artist(legend)
 
     for x, y, label in zip(gdf_states.centroid.x, gdf_states.centroid.y, gdf_states.index):
-        ax.text(x, y, label, color='blue', fontsize=26)
+        ax.text(x, y, label, color='white', fontsize=24)
     ax.set_facecolor('#0b0e12')
 
     fig.patch.set_facecolor('#0b0e12')
@@ -363,6 +379,25 @@ def standardize_county_name(county_name):
             county_name = county_name.replace('county', '')
 
     return county_name
+
+
+def get_chart_data(county, state):
+    df = pd.read_csv('datasets/uscounties.csv')
+    lat_long =get_lat_long(df, county, state)
+    if lat_long is None:
+        print(f"Could not find latitude and longitude for {county}, {state}")
+        return None
+    lat, long = lat_long
+    weather_data = weather.get_cached_weather_data(lat, long)
+    last_30_days = weather_data.tail(30)
+    plt.figure(figsize=(10, 5))
+    plt.plot( weather_data['temperature_2m_max'], label='Max Temperature')
+    plt.plot( weather_data['temperature_2m_min'], label='Min Temperature')
+    plt.xlabel('Day')
+    plt.ylabel('Temperature (°C)')
+    plt.title('Temperature trend for the last 30 days')
+    plt.legend()
+    st.pyplot(plt)
 
 
 def state_get_abrev(state):
