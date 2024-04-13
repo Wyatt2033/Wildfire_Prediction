@@ -395,7 +395,7 @@ def get_chart_data(county, state):
     plt.plot( weather_data['temperature_2m_min'], label='Min Temperature')
     plt.xlabel('Day')
     plt.ylabel('Temperature (°C)')
-    plt.title('Temperature trend for the last 30 days')
+    plt.title('14 Day Temperature Trend')
     plt.legend()
     st.pyplot(plt)
 

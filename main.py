@@ -178,12 +178,12 @@ def main():
         counties = data.get_counties_for_state(state)
         counties = [geocoding.standardize_county_name(county) for county in counties]
         geocoding.plot_fire_map(state, counties)
-        st.write(f'For a 30-day average weather data for a specific county in {state}, please select one below.')
+        st.write(f'For a daily average weather data for a specific county in {state}, please select one below.')
         county = st.selectbox('Select a county', counties, key='county', index=None)
         if county:
             geocoding.get_chart_data(county, state)
             average_temperature = get_average_weather(county, state)
-            st.write(f'The 30-day average weather data for {county}, {state} is:')
+            st.write(f'The daily average weather data for {county}, {state} is:')
             for variable, value in average_temperature.items():
                 st.write(f'{variable}: {value}')
 
