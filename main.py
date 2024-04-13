@@ -159,13 +159,15 @@ def listen():
 
 
 def main():
-    accuracy = randomForest.print_accuracy()
-    st.write(f'The accuracy of the wildfire risk condition prediction is {accuracy * 100:.2f}%')
+
     merge_data = pd.read_csv('./datasets/merged_data.csv')
+
     model_file_path = './models/trained_model.pkl'
     if not os.path.exists(model_file_path):
         print('Model not found. Downloading model...')
         update_scheduler.download_file_from_google_drive()
+    accuracy = randomForest.print_accuracy()
+    st.write(f'The accuracy of the wildfire risk condition prediction is {accuracy * 100:.2f}%')
     st.write('This is an overall view of the contiguous United States. The map shows counties with conditions that '
              'favor wildfires.')
     geocoding.country_fire_map()
