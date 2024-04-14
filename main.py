@@ -32,7 +32,7 @@ This is a web app to predict the risk of wildfires in the United States.
     """)
 
 gdf = gpd.read_file('./map_data/cb_2018_us_county_5m.shp')
-print(gdf.columns)
+#print(gdf.columns)
 
 
 # Calls load_data() from data.py (Not used with current implementation)
