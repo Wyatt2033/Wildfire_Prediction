@@ -165,6 +165,7 @@ def main():
     update_scheduler.download_model_from_google_drive()
     accuracy = randomForest.print_accuracy()
     st.write(f'The accuracy of the wildfire risk condition prediction is {accuracy * 100:.2f}%')
+    st.write('The prediction accuracy percentage  is based on the proportion of correct prdictions (true positives and true negatives) among the total wildfire test cases examined.')
     st.write('This is an overall view of the contiguous United States. The map shows counties with conditions that '
              'favor wildfires.')
     geocoding.country_fire_map()
