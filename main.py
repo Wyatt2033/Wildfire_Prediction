@@ -161,8 +161,7 @@ def listen():
 def main():
 
     merge_data = pd.read_csv('./datasets/merged_data.csv')
-    update_scheduler.download_state_from_google_drive()
-    update_scheduler.download_weather_from_google_drive()
+    update_scheduler.download_and_unpack_cache()
     update_scheduler.download_model_from_google_drive()
     accuracy = randomForest.print_accuracy()
     st.write(f'The accuracy of the wildfire risk condition prediction is {accuracy * 100:.2f}%')
