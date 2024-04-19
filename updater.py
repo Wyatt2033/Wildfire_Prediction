@@ -109,36 +109,21 @@ def update_state_weather_cache():
         state_abrev = geocoding.state_get_abrev(state)
         counties = data.get_counties_for_state(state_abrev)
         map_filename = f'./cache/weather_cache/{state_abrev}_map_data.csv'
-        if os.path.exists(map_filename):
-            buf = load(map_filename)
-            grid_layout = ""
-            county_numbers = {county: i for i, county in enumerate(counties)}
-            for county, number in county_numbers.items():
 
-                grid_layout += f"| {county:<20}: {number:<5} "
-                if (number + 1) % 6 == 0:
-                    grid_layout += "\n"
-            list_placeholder = st.empty()
-            list_placeholder.markdown(grid_layout)
-            print(f"Data for {state}:")
-            print(state)
+        list_placeholder = st.empty()
+        plot_placeholder = st.empty()
+        gdf = gpd.read_file('./map_data/cb_2018_us_county_5m.shp')
+        gdf_state = gdf[gdf['STATEFP'] == state_fips[state_abrev]]
+        gdf_state['NAME'] = gdf_state['NAME'].apply(geocoding.standardize_county_name)
+        gdf_state['risk_color'] = 'white'
+        gdf_state = gdf_state.copy()
+        gdf_states = []
+        with Pool() as p:
+            gdf_states = p.map(geocoding.predict_and_plot,
+                               [(county, state, gdf_state.copy()) for county in counties])
 
-        else:
-
-            list_placeholder = st.empty()
-            plot_placeholder = st.empty()
-            gdf = gpd.read_file('./map_data/cb_2018_us_county_5m.shp')
-            gdf_state = gdf[gdf['STATEFP'] == state_fips[state_abrev]]
-            gdf_state['NAME'] = gdf_state['NAME'].apply(geocoding.standardize_county_name)
-            gdf_state['risk_color'] = 'white'
-            gdf_state = gdf_state.copy()
-            gdf_states = []
-            with Pool() as p:
-                gdf_states = p.map(geocoding.predict_and_plot,
-                                   [(county, state, gdf_state.copy()) for county in counties])
-
-            gdf_state = pd.concat([gdf_state] + gdf_states)
-            joblib.dump(gdf_state, map_filename)
+        gdf_state = pd.concat([gdf_state] + gdf_states)
+        joblib.dump(gdf_state, map_filename)
 
 
 def update_weather_data():
