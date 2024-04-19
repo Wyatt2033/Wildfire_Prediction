@@ -7,6 +7,7 @@ import joblib
 from geopy import Nominatim
 
 import data
+import geocoding
 import randomForest
 import weather
 import streamlit as st
@@ -350,23 +351,25 @@ def get_lat_long_geolocator(county_name, state_name):
 def get_lat_long(df, county_name, state_name):
     print(county_name, state_name)
 
+    county_name = geocoding.standardize_county_name(county_name)
+
     try:
         row = df[(df['county'].str.contains(county_name)) & (df['state_id'] == state_name)]
-
-        if row.empty:
-            print(f"Could not find latitude and longitude for {county_name}, {state_name}, using CSV")
-            print(f"Trying GoogleV3 geocoder.")
-            geolocator = GoogleV3(api_key='AIzaSyBxIbGubpa41aTqVXdpFSzHfzaYibiXe6M')
-            location = geolocator.geocode(f"{county_name}, {state_name}")
-            return location.latitude, location.longitude
-
+        print(row['lat'].values[0], row['lng'].values[0])
+        return row['lat'].values[0], row['lng'].values[0]
 
     except KeyError:
-        print(f"Could not find latitude and longitude for {county_name}, {state_name}")
-        return None, None
+        print(f"Could not find latitude and longitude for {county_name}, {state_name} in DataFrame.")
+        print("Trying Google Maps API...")
 
-    print(row['lat'].values[0], row['lng'].values[0])
-    return row['lat'].values[0], row['lng'].values[0]
+        geolocator = GoogleV3(api_key='AIzaSyBxIbGubpa41aTqVXdpFSzHfzaYibiXe6M')
+        location = geolocator.geocode(f"{county_name}, {state_name}")
+
+        if location is None:
+            print(f"Could not find latitude and longitude for {county_name}, {state_name} using Google Maps API.")
+            return None, None
+
+        return (location.latitude, location.longitude)
 
 
 def standardize_county_name(county_name):

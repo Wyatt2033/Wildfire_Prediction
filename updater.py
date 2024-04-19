@@ -108,7 +108,16 @@ def update_state_weather_cache():
     for state in state_names:
         state_abrev = geocoding.state_get_abrev(state)
         counties = data.get_counties_for_state(state_abrev)
+        counties = [geocoding.standardize_county_name(county) for county in counties]
         map_filename = f'./cache/weather_cache/{state_abrev}_map_data.csv'
+
+        if os.path.exists(map_filename):
+            try:
+                os.remove(map_filename)
+                print(f"Removed {map_filename}")
+
+            except Exception as e:
+                print(f"Error removing {map_filename}: {e}")
 
         list_placeholder = st.empty()
         plot_placeholder = st.empty()
@@ -120,7 +129,7 @@ def update_state_weather_cache():
         gdf_states = []
         with Pool() as p:
             gdf_states = p.map(geocoding.predict_and_plot,
-                               [(county, state, gdf_state.copy()) for county in counties])
+                               [(county, state_abrev, gdf_state.copy()) for county in counties])
 
         gdf_state = pd.concat([gdf_state] + gdf_states)
         joblib.dump(gdf_state, map_filename)
@@ -135,7 +144,7 @@ def update_weather_data():
         for county in counties:
             print(f"Getting weather data for {county}, {state_abrev}")
             try:
-                county = geocoding.standardize_county_name(county)
+                county = geocoding.standardize_county_name(county)  # standardize the county name
                 df = pd.read_csv('./datasets/uscounties.csv')
                 lat_long = geocoding.get_lat_long(df, county, state_abrev)
                 if lat_long is None:
