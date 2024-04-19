@@ -127,7 +127,9 @@ def data_age_check():
 
 
 def main():
-    data_age_check()
+    updater.download_and_unpack_cache()
+    updater.download_model_from_google_drive()
+    # data_age_check()
     merge_data = pd.read_csv('./datasets/merged_data.csv')
     accuracy = randomForest.print_accuracy()
     st.write(f'The accuracy of the wildfire risk condition prediction is {accuracy * 100:.2f}%')
