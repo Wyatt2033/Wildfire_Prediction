@@ -50,7 +50,7 @@ def download_and_unpack_cache():
     # Google Drive download link
     url = f"https://drive.google.com/uc?id={file_id}"
     # Download the file
-    gdown.download(url, destination, quiet=False)
+    gdown.download(url, destination, quiet=True)
 
     # Unpack the .tar.gz file
     with tarfile.open(destination, 'r:gz') as tar:
@@ -151,7 +151,7 @@ def update_weather_data():
             print(f"Getting weather data for {county}, {state_abrev}")
             try:
                 county = geocoding.standardize_county_name(county)
-                df = pd.read_csv('datasets/uscounties.csv')
+                df = pd.read_csv('./datasets/uscounties.csv')
                 lat_long = geocoding.get_lat_long(df, county, state_abrev)
                 if lat_long is None:
                     print(f"Could not find latitude and longitude for {county}, {state}")
