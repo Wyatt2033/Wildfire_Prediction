@@ -67,7 +67,7 @@ def download_weather_from_google_drive():
         os.makedirs(destination_dir)
 
     url = f"https://drive.google.com/uc?id={file_id}"
-    gdown.download(url, destination, quiet=False)
+    gdown.download(url, destination, quiet=True)
 
 
 def download_state_from_google_drive():
@@ -80,7 +80,7 @@ def download_state_from_google_drive():
         os.makedirs(destination_dir)
 
     url = f"https://drive.google.com/uc?id={file_id}"
-    gdown.download(url, destination, quiet=False)
+    gdown.download(url, destination, quiet=True)
 
 
 def update_state_cache():
