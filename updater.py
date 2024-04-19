@@ -35,7 +35,7 @@ def download_model_from_google_drive():
         if not os.path.exists(destination_dir):
             os.makedirs(destination_dir)
             url = f"https://drive.google.com/uc?id={file_id}"
-            gdown.download(url, destination, quiet=False)
+            gdown.download(url, destination, quiet=True)
 
 
 def download_and_unpack_cache():

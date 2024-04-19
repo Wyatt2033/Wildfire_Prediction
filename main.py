@@ -116,6 +116,7 @@ def data_age_check():
         updater.download_and_unpack_cache()
         updater.download_model_from_google_drive()
 
+
     # If the function has not been run in the last 7 days
     if last_run_date is None or (current_date - last_run_date).days > 7:
         print('Updating weather data...')
