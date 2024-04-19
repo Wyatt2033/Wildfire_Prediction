@@ -1,14 +1,16 @@
 import os
 import threading
 import time
+from multiprocessing import Pool
 
+from joblib import load
 import joblib
 import schedule
 import datetime
 import data
 import geocoding
 import randomForest
-import update_scheduler
+import updater
 import weather
 import streamlit as st
 import pandas as pd
@@ -32,6 +34,8 @@ This is a web app to predict the risk of wildfires in the United States.
     """)
 
 gdf = gpd.read_file('./map_data/cb_2018_us_county_5m.shp')
+
+
 #print(gdf.columns)
 
 
@@ -74,52 +78,8 @@ def train_model(x_train, y_train, x_test, y_test):
 
 last_update_dates = {}
 
-
-def update_weather_data():
-    start_index = state_names.index("Alabama")
-    for state in state_names[start_index:]:
-        state_abrev = geocoding.state_get_abrev(state)
-        counties = data.get_counties_for_state(state_abrev)
-        print("Getting weather data for", state_abrev)
-        for county in counties:
-            try:
-                county = geocoding.standardize_county_name(county)
-                df = pd.read_csv('datasets/uscounties.csv')
-                lat_long = geocoding.get_lat_long(df, county, state_abrev)
-                if lat_long is None:
-                    print(f"Could not find latitude and longitude for {county}, {state}")
-                    continue
-                lat, long = lat_long
-                last_update_date = last_update_dates.get(county)
-
-                if last_update_date is not None and datetime.datetime.now() - last_update_date < datetime.timedelta(
-                        weeks=1):
-                    print(f"Skipping update for {county}, {state} as the data is newer than a week")
-                    continue
-
-                weather_data = weather.get_cached_weather_data(lat, long)
-                last_update_dates[county] = datetime.now()
-
-            except Exception as e:
-                print(f"An error occurred while updating weather data for {county}, {state}: {e}")
-        break
-    update_state_cache()
-
-
-def update_state_cache():
-    start_index = state_names.index("Alabama")
-    for state in state_names[start_index:]:
-
-        state_abrev = geocoding.state_get_abrev(state)
-        map_filename = f'./cache/state_data_cache/{state_abrev}_map_data.joblib'
-        if os.path.exists(map_filename):
-            os.remove(map_filename)
-
-        new_data = geocoding.generate_map_data(state_abrev)
-        joblib.dump(new_data, map_filename)
-
-
 last_run_date = None
+
 
 def get_average_weather(county, state):
     df = pd.read_csv('datasets/uscounties.csv')
@@ -143,29 +103,35 @@ def get_average_weather(county, state):
     return average_weather
 
 
-
-
-def listen():
+def data_age_check():
     global last_run_date
     # Get the current date
     current_date = datetime.date.today()
-    # If the function has not been run today
-    if last_run_date != current_date:
+
+    # Load the last run date from the file
+    if os.path.exists('last_run_date.pkl'):
+        last_run_date = joblib.load('last_run_date.pkl')
+
+    else:
+        updater.download_and_unpack_cache()
+        updater.download_model_from_google_drive()
+
+    # If the function has not been run in the last 7 days
+    if last_run_date is None or (current_date - last_run_date).days > 7:
         print('Updating weather data...')
-        update_weather_data()
+        updater.update_weather_data()
         # Update the last run date
         last_run_date = current_date
-
+        joblib.dump(last_run_date, 'last_run_date.pkl')
 
 
 def main():
-
+    data_age_check()
     merge_data = pd.read_csv('./datasets/merged_data.csv')
-    update_scheduler.download_and_unpack_cache()
-    update_scheduler.download_model_from_google_drive()
     accuracy = randomForest.print_accuracy()
     st.write(f'The accuracy of the wildfire risk condition prediction is {accuracy * 100:.2f}%')
-    st.write('The prediction accuracy percentage  is based on the proportion of correct prdictions (true positives and true negatives) among the total wildfire test cases examined.')
+    st.write(
+        'The prediction accuracy percentage  is based on the proportion of correct prdictions (true positives and true negatives) among the total wildfire test cases examined.')
     st.write('This is an overall view of the contiguous United States. The map shows counties with conditions that '
              'favor wildfires.')
     geocoding.country_fire_map()
@@ -186,6 +152,7 @@ def main():
             st.write(f'The daily average weather data for {county}, {state} is:')
             for variable, value in average_temperature.items():
                 st.write(f'{variable}: {value}')
+
 
 # Calls main() when the script is run
 if __name__ == "__main__":
