@@ -109,8 +109,8 @@ def data_age_check():
     current_date = datetime.date.today()
 
     # Load the last run date from the file
-    if os.path.exists('last_run_date.pkl'):
-        last_run_date = joblib.load('last_run_date.pkl')
+    if os.path.exists('./last_run_date.pkl'):
+        last_run_date = joblib.load('./last_run_date.pkl')
 
     else:
         updater.download_and_unpack_cache()
@@ -123,7 +123,7 @@ def data_age_check():
         updater.update_weather_data()
         # Update the last run date
         last_run_date = current_date
-        joblib.dump(last_run_date, 'last_run_date.pkl')
+        joblib.dump(last_run_date, './last_run_date.pkl')
 
 
 def main():
