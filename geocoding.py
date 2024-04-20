@@ -2,10 +2,8 @@ import contextlib
 import io
 import os
 import warnings
-
 import joblib
 from geopy import Nominatim
-
 import data
 import geocoding
 import randomForest
@@ -21,6 +19,15 @@ from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
 from joblib import load
 from multiprocessing import Pool
+
+STATE_FIPS = {
+    "AL": "01", "AZ": "04", "AR": "05", "CA": "06", "CO": "08", "CT": "09", "DE": "10", "FL": "12",
+    "GA": "13", "HI": "15", "ID": "16", "IL": "17", "IN": "18", "IA": "19", "KS": "20", "KY": "21", "LA": "22",
+    "ME": "23", "MD": "24", "MA": "25", "MI": "26", "MN": "27", "MS": "28", "MO": "29", "MT": "30", "NE": "31",
+    "NV": "32", "NH": "33", "NJ": "34", "NM": "35", "NY": "36", "NC": "37", "ND": "38", "OH": "39", "OK": "40",
+    "OR": "41", "PA": "42", "RI": "44", "SC": "45", "SD": "46", "TN": "47", "TX": "48", "UT": "49", "VT": "50",
+    "VA": "51", "WA": "53", "WV": "54", "WI": "55", "WY": "56"
+}
 
 
 class SizedLegend(Legend):
@@ -43,8 +50,31 @@ def create_legend():
     buf.seek(0)
     st.image(buf, caption='Legend', use_column_width=True)
 
+def standardize_county_name(county_name):
+    """Standardizes county names by removing certain suffixes."""
+    suffixes = [" County", " Parish", " Borough", " City", " Municipality", " Census Area", " Area", " and", "City",
+                "city"]
+    for suffix in suffixes:
+        if suffix in county_name:
+            county_name = county_name.replace(suffix, "")
+            county_name = county_name.strip()
+            county_name = county_name.replace('county', '')
+    return county_name
+def get_lat_long(df, county_name, state_name):
+    """Fetches latitude and longitude for a given county and state."""
+    county_name = geocoding.standardize_county_name(county_name)
+    try:
+        row = df[(df['county'].str.contains(county_name)) & (df['state_id'] == state_name)]
+        return row['lat'].values[0], row['lng'].values[0]
+    except KeyError:
+        geolocator = GoogleV3(api_key='AIzaSyBxIbGubpa41aTqVXdpFSzHfzaYibiXe6M')
+        location = geolocator.geocode(f"{county_name}, {state_name}")
+        if location is None:
+            return None, None
+        return (location.latitude, location.longitude)
 
 def predict_and_plot(args):
+    """Predicts and plots wildfire risk for a given county and state."""
     warnings.filterwarnings("ignore", category=FutureWarning)
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     county, state, gdf_state = args
@@ -52,34 +82,19 @@ def predict_and_plot(args):
         df = pd.read_csv('datasets/uscounties.csv')
         lat, long = get_lat_long(df, county, state)
         if lat is None or long is None:
-            print(f"Latitude and longitude not found for {county}, {state}")
             return
         with open(os.devnull, 'w') as f, contextlib.redirect_stdout(f):
             weather_data = weather.get_cached_weather_data(lat, long)
-
         weather_data_averages = pd.DataFrame(weather_data.mean()).transpose()
         wildfire_risk = randomForest.predict_wildfire_risk(weather_data_averages)
         risk_color = 'red' if wildfire_risk[0] else 'blue'
         if gdf_state['NAME'].str.contains(county).any():
             gdf_state.loc[
                 gdf_state['NAME'].str.contains(county), 'risk_color'] = risk_color
-            #print(f"Assigned color {risk_color} for {county}, {state}")
-        else:
-            print(f"County name {county} does not match in the GeoDataFrame")
-        # Check for duplicate rows in the gdf_state DataFrame
-        duplicate_rows = gdf_state[gdf_state.duplicated(['NAME'], keep=False)]
-
-        if not duplicate_rows.empty:
-            print("Duplicate rows in gdf_state:")
-            print(duplicate_rows)
         return gdf_state.loc[gdf_state['NAME'].str.contains(county) & gdf_state['risk_color'].notna()]
-
-
     except Exception as e:
-        error_message = f"An error occurred while processing {county}, {state}: {e}"
         with open('error_log.txt', 'a') as f:
-            f.write(error_message + '\n')
-        print(error_message)
+            f.write(f"An error occurred while processing {county}, {state}: {e}\n")
         return gdf_state
 
 
@@ -346,42 +361,6 @@ def get_lat_long_geolocator(county_name, state_name):
         return None, None
 
     return (location.latitude, location.longitude)
-
-
-def get_lat_long(df, county_name, state_name):
-    print(county_name, state_name)
-
-    county_name = geocoding.standardize_county_name(county_name)
-
-    try:
-        row = df[(df['county'].str.contains(county_name)) & (df['state_id'] == state_name)]
-        print(row['lat'].values[0], row['lng'].values[0])
-        return row['lat'].values[0], row['lng'].values[0]
-
-    except KeyError:
-        print(f"Could not find latitude and longitude for {county_name}, {state_name} in DataFrame.")
-        print("Trying Google Maps API...")
-
-        geolocator = GoogleV3(api_key='AIzaSyBxIbGubpa41aTqVXdpFSzHfzaYibiXe6M')
-        location = geolocator.geocode(f"{county_name}, {state_name}")
-
-        if location is None:
-            print(f"Could not find latitude and longitude for {county_name}, {state_name} using Google Maps API.")
-            return None, None
-
-        return (location.latitude, location.longitude)
-
-
-def standardize_county_name(county_name):
-    suffixes = [" County", " Parish", " Borough", " City", " Municipality", " Census Area", " Area", " and", "City",
-                "city"]
-    for suffix in suffixes:
-        if suffix in county_name:
-            county_name = county_name.replace(suffix, "")
-            county_name = county_name.strip()
-            county_name = county_name.replace('county', '')
-
-    return county_name
 
 
 def get_chart_data(county, state):
