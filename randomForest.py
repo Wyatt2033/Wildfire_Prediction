@@ -56,8 +56,35 @@ def print_accuracy():
     """
     model = joblib.load(MODEL_PATH)
     merged_data = pd.read_csv(DATA_PATH)
-    X_train, X_test, y_train, y_test = split_data(merged_data)
+    merged_data['WILDFIRE_OCCURRENCE'] = merged_data['FIRE_SIZE'] > merged_data['FIRE_SIZE'].quantile(0.75).astype(int)
+    merged_data['DATE'] = pd.to_datetime(merged_data['DATE'])
+    merged_data['MONTH'] = merged_data['DATE'].dt.month
+    merged_data['DAY_OF_YEAR'] = merged_data['DATE'].dt.dayofyear
+
+    features = [
+        'T2M',  # Temperature at 2 Meters
+        'T2M_MAX',  # Maximum Temperature at 2 Meters
+        'T2M_MIN',  # Minimum Temperature at 2 Meters
+        'T2M_RANGE',  # Temperature Range at 2 Meters
+        'T2MDEW',  # Dew/Frost Point at 2 Meters
+        'WS10M',  # Wind Speed at 10 Meters
+        'WS10M_MAX',  # Maximum Wind Speed at 10 Meters
+        'WS10M_RANGE',  # Wind Speed Range at 10 Meters
+        'QV2M',  # Specific Humidity at 2 Meters
+        'PRECTOT',  # Total Precipitation
+        'PS',  # Surface Pressure
+        'MONTH',  # Month extracted from DATE
+        'DAY_OF_YEAR'  # Day of the year extracted from DATE
+    ]
+    X = merged_data[features]
+    y = merged_data['WILDFIRE_OCCURRENCE']
+
+    # Split the data into training set and test set
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Use the model to predict the wildfire risks for the test set
     y_pred = model.predict(X_test)
+    # Calculate the accuracy
     accuracy = accuracy_score(y_test, y_pred)
     logging.info(f'The accuracy of the wildfire risk prediction is {accuracy * 100:.2f}%')
     return accuracy
