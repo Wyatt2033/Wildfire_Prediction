@@ -1,3 +1,4 @@
+import json
 import logging
 
 from flask import Flask, jsonify
@@ -213,16 +214,52 @@ def country_fire_map():
         "OR": "41", "PA": "42", "RI": "44", "SC": "45", "SD": "46", "TN": "47", "TX": "48", "UT": "49", "VT": "50",
         "VA": "51", "WA": "53", "WV": "54", "WI": "55", "WY": "56"
     }
-    map_data = {}
-
+    gdfs = []
     for state_abrev in state_abrevs:
+        print(f"Generating map data for {state_abrev}")
+        # Construct the filename of the cache file
+        filename = f'./cache/state_data_cache/{state_abrev}_map_data.joblib'
 
-        filename =f'./cache/state_data_cache/{state_abrev}_map_data.joblib'
+        # Check if the file exists
+        if os.path.exists(filename):
+            # Load the data from the cache file
+            gdf = joblib.load(filename)
 
-        gdf_state = joblib.load(filename)
 
-        map_data[state_abrev] = gdf_state.to_json()
+        else:
+            # Generate the data required for the map
+            gdf = generate_map_data(state_abrev)
+            print(f"Data for {state_abrev}:")
+            print(gdf['risk_color'].value_counts())
+            # Save the data into a cache file
+            joblib.dump(gdf, filename)
 
+        # Append the GeoDataFrame to the list
+        gdfs.append(gdf)
+
+    # Concatenate all the GeoDataFrames into a single GeoDataFrame
+    gdf_us = pd.concat(gdfs)
+    print("Data for the entire country:")
+    print(gdf_us['risk_color'].value_counts())
+    white_counties = gdf_us.loc[gdf_us['risk_color'] == 'white', 'NAME']
+    print(white_counties)
+
+    gdf_us['state_fips'] = gdf_us['STATEFP']
+    # Group the GeoDataFrame by state and calculate the centroid of each state
+    gdf_us['centroid'] = gdf_us.geometry.centroid
+    gdf_states = gdf_us.dissolve(by='STATEFP', aggfunc='first')
+
+
+
+    gdf_us_json = json.loads(gdf_us.to_json)
+
+    gdf_states_json = json.loads(gdf_states.to_json)
+    map_data = {
+        'us': gdf_us_json,
+        'states': gdf_states_json
+    }
+
+    map_data = gdf_states_json
     return jsonify(map_data)
 
 
